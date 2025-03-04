@@ -1,0 +1,196 @@
+﻿<Window x:Class="JobManagementApp.Views.JobLogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:JobManagementApp.Helpers" xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        mc:Ignorable="d"
+        Title="JobLogWindow" Height="450" Width="800">
+    <Window.Resources>
+        <local:JobParamConverter x:Key="jobParamConverter" />
+        <local:FileTypeToJapaneseConverter x:Key="fileTypeToJapaneseConverter"/>
+        <local:ObserverStatusToJapaneseConverter x:Key="observerStatusToJapaneseConverter"/>
+
+        <Style x:Key="LogListItemBoderStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="Gainsboro" />
+            <Setter Property="BorderThickness" Value="0.8" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Height" Value="30" />
+        </Style>
+        
+        <Style x:Key="FileNameStyle" TargetType="TextBlock">
+            <Setter Property="Width" Value="365" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="5, 0, 0, 0" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style x:Key="FileUpdateStyle" TargetType="TextBlock">
+            <Setter Property="Width" Value="115" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="10, 0, 10, 0" />
+            <Setter Property="Foreground" Value="Gray" />
+        </Style>
+
+        <Style x:Key="FileSizeStyle" TargetType="TextBlock">
+            <Setter Property="Width" Value="65" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="10, 0, 10, 0" />
+            <Setter Property="Foreground" Value="Gray" />
+        </Style>
+
+        <Style x:Key="CopyPercentStyle" TargetType="TextBlock">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="10, 0, 5, 0" />
+            <Setter Property="Padding" Value="5, 0, 0, 0" />
+            <Setter Property="Foreground" Value="Gray" />
+        </Style>
+
+        <DataTemplate x:Key="jobListItemTemplate">
+            <Border Style="{StaticResource LogListItemBoderStyle}">
+                <StackPanel Orientation="Horizontal">
+
+                    <!-- ステータス -->
+                    <Border>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderThickness" Value="2" />
+                                <Setter Property="CornerRadius" Value="5" />
+                                <Setter Property="Width" Value="50" />
+                               <Style.Triggers>
+                                    <!-- ログ -->
+                                    <DataTrigger Binding="{Binding FileType}" Value="0">
+                                        <Setter Property="Background" Value="Gainsboro"/>
+                                    </DataTrigger>
+                                    <!-- 受信 -->
+                                    <DataTrigger Binding="{Binding FileType}" Value="1">
+                                        <Setter Property="Background" Value="Pink"/>
+                                    </DataTrigger>
+                                    <!-- 送信 -->
+                                    <DataTrigger Binding="{Binding FileType}" Value="2">
+                                        <Setter Property="Background" Value="LightSteelBlue"/>
+                                    </DataTrigger>
+                                    <!-- その他 -->
+                                    <DataTrigger Binding="{Binding FileType}" Value="3">
+                                        <Setter Property="Background" Value="LightSlateGray"/>
+                                    </DataTrigger>
+                                </Style.Triggers> 
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding Path=FileType, Converter={StaticResource fileTypeToJapaneseConverter}}" HorizontalAlignment="Center" Margin="5"/>
+                    </Border>
+
+                    <TextBlock Text="{Binding DisplayFileName}"  Style="{StaticResource FileNameStyle}" />
+                    <TextBlock Text="{Binding UpdateDate}" Style="{StaticResource FileUpdateStyle}"/>
+                    <TextBlock Text="{Binding Size}" Style="{StaticResource FileSizeStyle}"/>
+                    
+                    <!-- 監視ステータス -->
+                    <Border>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderThickness" Value="2" />
+                                <Setter Property="CornerRadius" Value="5" />
+                                <Setter Property="Width" Value="50" />
+                               <Style.Triggers>
+                                    <!-- 取得済 -->
+                                    <DataTrigger Binding="{Binding ObserverStatus}" Value="0">
+                                        <Setter Property="Background" Value="LightSteelBlue"/>
+                                    </DataTrigger>
+                                    <!-- 監視中 -->
+                                    <DataTrigger Binding="{Binding ObserverStatus}" Value="1">
+                                        <Setter Property="Background" Value="Khaki"/>
+                                    </DataTrigger>
+                                    <!-- 停止中 -->
+                                    <DataTrigger Binding="{Binding ObserverStatus}" Value="9">
+                                        <Setter Property="Background" Value="Gainsboro"/>
+                                    </DataTrigger>
+                                </Style.Triggers> 
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding Path=ObserverStatus, Converter={StaticResource observerStatusToJapaneseConverter}}" HorizontalAlignment="Center" Margin="5"/>
+                    </Border>
+
+                    <!-- ファイルコピーパーセント -->
+                    <TextBlock Text="{Binding CopyPercent}" Style="{StaticResource CopyPercentStyle}"/>
+
+                    <!-- 編集ボタン -->
+                    <Button Command="{Binding EditCommand}" Style="{StaticResource NoStyleButton}" Width="17"  Height="17" Margin="4" >
+                        <Button.CommandParameter>
+                            <MultiBinding Converter="{StaticResource jobParamConverter}" >
+                                <Binding Path="Scenario" />
+                                <Binding Path="Eda" />
+                                <Binding Path="FilePath" />
+                                <Binding Path="FileName" />
+                            </MultiBinding>
+                        </Button.CommandParameter>
+                        <Image Source="..\Resources\edit.png"/>
+                    </Button>
+                    
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+    </Window.Resources>
+
+        <StackPanel Orientation="Vertical">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="一時保存先パス" Margin="5" VerticalAlignment="Center"></TextBlock>
+                <TextBox Text="{Binding TempSavePath}" Width="600" Margin="5" VerticalAlignment="Center"></TextBox>
+
+                <!-- パス保存ボタン -->
+                <Border Background="LightBlue" Style="{StaticResource CommandButtonBorder}" Width="70" Height="20" Margin="6, 0, 0, 0">
+                    <Button Command="{Binding TempFolderUpdateCommand}" Style="{StaticResource NoStyleButton}" CommandParameter="{Binding TempSavePath}">
+                        <TextBlock FontWeight="Bold" Text="パス保存"/>
+                    </Button>
+                </Border>
+
+            </StackPanel>
+
+            <ListBox ItemsSource="{Binding Logs}" ItemTemplate="{StaticResource jobListItemTemplate}" Height="340" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+
+            <Grid Margin="7">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="110" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="110" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="110" />
+                </Grid.ColumnDefinitions>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="25" />
+                </Grid.RowDefinitions>
+
+                <!-- 閉じるボタン -->
+                <Border Grid.Column="0" Background="Gainsboro" Style="{StaticResource CommandButtonBorder}">
+                    <Button Command="{Binding CloseCommand}" CommandParameter="{Binding window}" Style="{StaticResource NoStyleButton}">
+                        <TextBlock FontWeight="Bold" Text="閉じる"/>
+                    </Button>
+                </Border>
+
+                <!-- フォルダを開くボタン -->
+                <Border Grid.Column="2" Background="Khaki" Style="{StaticResource CommandButtonBorder}">
+                    <Button Command="{Binding FolderCommand}" CommandParameter="{Binding ToCopyFolderPath}" Style="{StaticResource NoStyleButton}">
+                        <TextBlock FontWeight="Bold" Text="フォルダを開く"/>
+                    </Button>
+                </Border>
+
+                <!-- 追加ボタン -->
+                <Border Grid.Column="4" Background="LightBlue" Style="{StaticResource CommandButtonBorder}">
+                    <Button Command="{Binding AddLogCommand}" Style="{StaticResource NoStyleButton}">
+                        <Button.CommandParameter>
+                            <MultiBinding Converter="{StaticResource jobParamConverter}" >
+                                <Binding Path="Scenario" />
+                                <Binding Path="Eda" />
+                            </MultiBinding>
+                        </Button.CommandParameter>
+                        <TextBlock FontWeight="Bold" Text="ログを追加"/>
+                    </Button>
+                </Border>
+
+            </Grid>
+        </StackPanel>
+</Window>
