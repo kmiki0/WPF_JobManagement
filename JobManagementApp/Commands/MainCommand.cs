@@ -42,7 +42,7 @@ namespace JobManagementApp.Commands
         /// <summary> 
         /// 画面更新　押下イベント
         /// </summary> 
-        public void RefreshButton_Click(object parameter)
+        public void RefreshButton_Click(object _)
         {
             // 受信出来次第、画面更新
             _if.RefreshJobList().ContinueWith(x =>
@@ -54,7 +54,7 @@ namespace JobManagementApp.Commands
         /// <summary> 
         /// ジョブ追加　押下イベント
         /// </summary> 
-        public void NewJobButton_Click(object parameter)
+        public void NewJobButton_Click(object _)
         {
             var vm = new JobDetailViewModel();
             //vm.RequestClose += DetailWindow_RequestClose;
