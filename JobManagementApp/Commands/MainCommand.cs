@@ -1,19 +1,12 @@
-﻿using JobManagementApp.BaseClass;
-using JobManagementApp.Helpers;
-using JobManagementApp.Manager;
-using JobManagementApp.Models;
-using JobManagementApp.ViewModels;
+﻿using System.Windows;
 using JobManagementApp.Views;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
+using JobManagementApp.ViewModels;
+using JobManagementApp.Models;
+using JobManagementApp.Helpers;
 
 namespace JobManagementApp.Commands
 {
-    public class MainCommand : JobCommandArgument
+    public class MainCommand
     {
         private readonly MainViewModel _vm;
         private readonly IMainModel _if;
