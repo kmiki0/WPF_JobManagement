@@ -21,18 +21,23 @@ namespace JobManagementApp.ViewModels
     public class MainViewModel : INotifyPropertyChanged
     {
         // イベント処理
-        private readonly MainCommand _mainCommand;
+        private readonly MainCommand _command;
 
+        private static readonly object _lock = new object();
         private static MainViewModel _instance;
         public static MainViewModel Instance
         {
             get
             {
-                if (_instance == null)
+                lock (_lock)
                 {
-                    _instance = new MainViewModel();
+                    if (_instance == null)
+                    {
+                        // IDataServiceのインスタンスを渡す
+                        _instance = new MainViewModel(new MainModel());
+                    }
+                    return _instance;
                 }
-                return _instance;
             }
         }
 
@@ -101,7 +106,7 @@ namespace JobManagementApp.ViewModels
         /// <summary>
         /// Init
         /// </summary>
-        public MainViewModel()
+        public MainViewModel(IMainModel IF)
         {
             //_jobListItemCommand = new JobListItemCommand();
             //_jobListItemCommand.DetailWindowClosed += DetailWindowHandler_DetailWindowClosed;
@@ -110,10 +115,10 @@ namespace JobManagementApp.ViewModels
             UserId = manager.GetUserFilePath(manager.CacheKey_UserId);
 
             // ボタンイベント 初期化
-            _mainCommand = new MainCommand();
-            CacheUserCommand = new RelayCommand(CacheUserUpdate_Click);
-            RefreshCommand = new RelayCommand(RefreshButton_Click);
-            NewJobCommand = new RelayCommand(NewJobButton_Click);
+            _command = new MainCommand(this, IF);
+            CacheUserCommand = new RelayCommand(_command.SaveUserButton_Click);
+            RefreshCommand = new RelayCommand(_command.RefreshButton_Click);
+            NewJobCommand = new RelayCommand(_command.NewJobButton_Click);
 
 
             // リスト初期化
@@ -125,28 +130,6 @@ namespace JobManagementApp.ViewModels
             // 初回のみ、運用処理管理Rの検索も行う
             DisplayUpdateDate = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
             GetUnyoCtlData();
-
-        }
-
-        // ボタン押下　イベント
-        private void RefreshButton_Click(object parameter)
-        {
-            if (!string.IsNullOrEmpty(parameter?.ToString()))
-            {
-                _mainCommand.RefreshButtonCommand(parameter);
-            }
-        }
-        private void NewJobButton_Click(object parameter)
-        {
-            _mainCommand.NewJobButtonCommand(parameter);
-        }
-
-        private void CacheUserUpdate_Click(object parameter)
-        {
-            if (!string.IsNullOrEmpty(parameter?.ToString()))
-            {
-                _mainCommand.CacheUserUpdateCommand(parameter, userId => UserId = userId);
-            }
         }
 
         // 定期実行 タイマー 開始

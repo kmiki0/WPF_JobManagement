@@ -17,8 +17,9 @@ namespace JobManagementApp.ViewModels
     public class JobDetailViewModel : INotifyPropertyChanged 
     {
         // イベント処理
-        private readonly JobDetailCommand _jobDetailCommand;
+        private readonly JobDetailCommand _command;
 
+        // JobDetailWindow
         public Window window;
 
         // シナリオ
@@ -34,7 +35,6 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(Eda));
             }
         }
-
         // ジョブID
         public string Id { get; set; }
         // ジョブ名
@@ -51,20 +51,8 @@ namespace JobManagementApp.ViewModels
         public string Send { get; set; }
         // メモ
         public string Memo { get; set; }
-
-        // 登録ボタン
-        public ICommand UpdateCommand { get; set; }
-        // 削除ボタン
-        public ICommand DeleteCommand { get; set; }
-        // 閉じるボタン
-        public ICommand CloseCommand { get; set; }
-        // シナリオ　フォーカスアウト　
-        public ICommand ScenarioLostFocusCommand { get; }
-
-
         // ジョブ実行方法 コンボボックス
         public Array cmbExecution => Enum.GetValues(typeof(emExecution));
-
         private emExecution _selectedExecution;
         public emExecution SelectedExecution
         {
@@ -75,10 +63,8 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(SelectedExecution));
             }
         }
-
         // ジョブステータス コンボボックス
         public Array cmbStatus => Enum.GetValues(typeof(emStatus));
-
         private emStatus _selectedStatus;
         public emStatus SelectedStatus
         {
@@ -90,12 +76,25 @@ namespace JobManagementApp.ViewModels
             }
         }
 
+        // 登録ボタン
+        public ICommand UpdateCommand { get; set; }
+        // 削除ボタン
+        public ICommand DeleteCommand { get; set; }
+        // 閉じるボタン
+        public ICommand CloseCommand { get; set; }
+        // シナリオ　フォーカスアウト　
+        public ICommand ScenarioLostFocusCommand { get; }
+
+        // Init
         public JobDetailViewModel()
         {
-            // 初期値セット
+            // 初期値 セット
             this.JobBoolean = true;
 
-            _jobDetailCommand = new JobDetailCommand();
+            // コマンド 初期化
+            _command = new JobDetailCommand();
+
+            // コマンド 画面処理にセット
             UpdateCommand = new RelayCommand(UpdateButtonCommand);
             CloseCommand = new RelayCommand(CloseButtonCommand);
             DeleteCommand = new RelayCommand(DeleteButtonCommand);
@@ -104,15 +103,20 @@ namespace JobManagementApp.ViewModels
 
         public JobDetailViewModel(string scenario, string eda)
         {
-            // シナリオと枝番に値がある場合、データ取得して画面に表示
+            // 引数をvmにセット
             this.Scenario = scenario;
             this.Eda = eda;
+
+            // データ取得して画面に表示
             if (!string.IsNullOrEmpty(Scenario) && !string.IsNullOrEmpty(Eda))
             {
                 SetJobDetailViewModel();
             }
 
-            _jobDetailCommand = new JobDetailCommand();
+            // コマンド 初期化
+            _command = new JobDetailCommand();
+
+            // コマンド 画面処理にセット
             UpdateCommand = new RelayCommand(UpdateButtonCommand);
             CloseCommand = new RelayCommand(CloseButtonCommand);
             DeleteCommand = new RelayCommand(DeleteButtonCommand);
@@ -208,13 +212,13 @@ namespace JobManagementApp.ViewModels
             {
                 // 枝番　設定
                 await Task.Run(() => 
-                    _jobDetailCommand.OnTextBoxLostFocus(this.Scenario, eda => this.Eda = eda)
+                    _command.OnTextBoxLostFocus(this.Scenario, eda => this.Eda = eda)
                 );
             }
         }
 
 
-        // vm変更するとき
+        // VM変更検知
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string propertyName)
         {

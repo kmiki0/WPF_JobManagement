@@ -101,6 +101,7 @@
     <Compile Include="Helpers\WindowHelper.cs" />
     <Compile Include="Manager\DatabaseManager.cs" />
     <Compile Include="Manager\UserFileManager.cs" />
+    <Compile Include="Models\MainModel.cs" />
     <Compile Include="Services\JobService.cs" />
     <Compile Include="ViewModels\JobLogDetailViewModel.cs" />
     <Compile Include="ViewModels\JobDetailViewModel.cs" />

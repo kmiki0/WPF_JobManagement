@@ -322,7 +322,7 @@ namespace JobManagementApp.ViewModels
                 if (log.ObserverStatus == emObserverStatus.SUCCESS) break;
 
                 // 10秒待機
-                await Task.Delay(10000);
+                await Task.Delay(5000);
 
                 var newFileInfo = new FileInfo(Path.Combine(log.FilePath, log.DisplayFileName));
                 if (fileInfo.LastWriteTime == newFileInfo.LastWriteTime && fileInfo.Length == newFileInfo.Length)
@@ -408,7 +408,7 @@ namespace JobManagementApp.ViewModels
             }
             finally
             {
-                 semaphore.Release();
+                semaphore.Release();
             }
         }
 

@@ -17,7 +17,7 @@ namespace JobManagementApp.ViewModels
     public class JobListItemViewModel : INotifyPropertyChanged
     {
         // イベント処理
-        private readonly JobListItemCommand _jobListItemCommand;
+        private readonly JobListItemCommand _command;
 
         // シナリオ
         public string Scenario { get; set; }
@@ -83,9 +83,10 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(UpdateDate));
             }
         }
-        // シナリオグループ
-        // （これで、TreeView上のシナリオのボタンやテキストを非表示にする）
+        // シナリオグループ（これで、TreeView上のシナリオのボタンやテキストを非表示にする）
         public bool IsScenarioGroup { get; set; }
+        // 入れ子リスト
+        public ObservableCollection<JobListItemViewModel> Children { get; set; }
 
         // 実行ボタン
         public ICommand RunCommand { get; set; }
@@ -94,21 +95,24 @@ namespace JobManagementApp.ViewModels
         // ログボタン
         public ICommand LogCommand { get; set; }
 
-        public ObservableCollection<JobListItemViewModel> Children { get; set; }
-
+        // Init
         public JobListItemViewModel()
         {
-            _jobListItemCommand = new JobListItemCommand();
-
+            // 初期値 セット
             IsScenarioGroup = false;
             UpdateDate = "";
             Children = new ObservableCollection<JobListItemViewModel>();
-            RunCommand = new RelayCommand(_jobListItemCommand.RunButton_Click);
-            DetailCommand = new RelayCommand(_jobListItemCommand.DetailButton_Click);
-            LogCommand = new RelayCommand(_jobListItemCommand.LogButton_Click);
+
+            // コマンド 初期化
+            _command = new JobListItemCommand();
+
+            // コマンド 画面処理にセット
+            RunCommand = new RelayCommand(_command.RunButton_Click);
+            DetailCommand = new RelayCommand(_command.DetailButton_Click);
+            LogCommand = new RelayCommand(_command.LogButton_Click);
         }
 
-        // vm変更するとき
+        // VM変更検知
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string propertyName)
         {
