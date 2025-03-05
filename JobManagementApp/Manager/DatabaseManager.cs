@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -32,17 +33,20 @@ namespace JobManagementApp.Manager
             // 読み込みエラー
             pobjIniFile.pGetInfo();
 
-            string logPath = "C:\\it_ap\\Log\\nomal.log";
-            string errPath = "C:\\it_ap\\Log\\nomal.log";
+
+            //カレントディレクトリ(プロジェクトのディレクトリ) 取得
+            pstrCurDir = AppDomain.CurrentDomain.BaseDirectory;
+
+            var normalPath = Path.Combine(pstrCurDir, "nomal.log");
+            var errPath = Path.Combine(pstrCurDir, "error.log");
+            // ファイルが存在しない場合、新規作成
+            if (!File.Exists(normalPath)) using (File.Create(normalPath)) { }
+            if (!File.Exists(errPath)) using (File.Create(errPath)) { }
 
             // 操作ログインスタンス生成 
-            pobjActLog = new clsMngLogFile(logPath, pobjIniFile.pGetItemInt("NORMAL_LOG", "LOG_LEVEL"));
+            pobjActLog = new clsMngLogFile(normalPath, pobjIniFile.pGetItemInt("NORMAL_LOG", "LOG_LEVEL"));
             // エラーログインスタンス生成
             pobjErrLog = new clsMngLogFile(errPath, pobjIniFile.pGetItemInt("ERROR_LOG", "LOG_LEVEL"));
-
-
-            //カレントディレクトリ取得
-            pstrCurDir = pobjIniFile.pGetItemString("PATH", "CURRENT_DIR");
 
 
             // ORACLEインスタンス生成 
