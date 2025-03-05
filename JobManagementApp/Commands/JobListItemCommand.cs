@@ -56,7 +56,7 @@ namespace JobManagementApp.Commands
         private void DetailWindow_RequestClose(object sender, JobListItemViewModel e)
         {
             // MainViewModelに通知するための処理を追加
-            MainViewModel.Instance.UpdateTestModel(e);
+            MainViewModel.Instance.UpdateJobs(e);
 
             // MainWindow アクティブ
             System.Windows.Window mainWindow = WindowHelper.GetMainWindow();

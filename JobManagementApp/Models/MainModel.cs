@@ -1,8 +1,10 @@
 ﻿using JobManagementApp.Manager;
+using JobManagementApp.Services;
 using JobManagementApp.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,8 +15,10 @@ namespace JobManagementApp.Models
     {
         // ユーザー保存
         bool SaveCacheUser(string userId);
-        // 画面のジョブリスト　再取得
-        Task<ObservableCollection<JobListItemViewModel>> RefreshJobList();
+        // 画面のジョブリスト取得
+        Task<List<JobListItemViewModel>> CreateJobList(string userId);
+        // 対象リストの運用処理の処理FLGを取得
+        Task<DataTable> CreateJobList(List<JobUnyoCtlModel> targetList);
     }
 
     /// <summary> 
@@ -47,9 +51,63 @@ namespace JobManagementApp.Models
         /// <summary> 
         /// 画面更新　押下イベント
         /// </summary> 
-        public async Task<ObservableCollection<JobListItemViewModel>> RefreshJobList()
+        public async Task<List<JobListItemViewModel>> CreateJobList(string userId)
         {
-            return new ObservableCollection<JobListItemViewModel>();
+            var result = new List<JobListItemViewModel>();
+
+            // 前続ジョブ検索用
+            var itemDict = new Dictionary<string, JobListItemViewModel>();
+
+            await Task.Run(() =>
+            {
+                // ジョブ管理を検索する
+                return JobService.LoadJobs(userId);
+            }).ContinueWith(x =>
+            {
+                // データが取得出来たら、リストに格納していく
+                foreach (DataRow row in x.Result.Rows)
+                {
+                    // 変換できない場合、WAIT
+                    emStatus status = Enum.TryParse(row["STATUS"].ToString(), out status) ? status : emStatus.WAIT;
+                    emExecution execution = Enum.TryParse(row["Execution"].ToString(), out execution) ? execution : emExecution.UNYO;
+
+                    var item = new JobListItemViewModel{
+                        Scenario = row["SCENARIO"].ToString(),
+                        Eda = row["EDA"].ToString(),
+                        Id = row["ID"].ToString(),
+                        Name = row["NAME"].ToString(),
+                        Execution = execution,
+                        JobBoolean = int.Parse(row["JOBBOOLEAN"].ToString()) != 0,
+                        Status = status
+                    };
+
+                    // vm を辞書に追加
+                    itemDict[item.Id] = item;
+
+                    var beforeJob = row["BEFOREJOB"].ToString();
+
+                    // 前続ジョブがあるか確認
+                    if (itemDict.TryGetValue(beforeJob, out var existingItem))
+                    {
+                        // 作成したUIに追加する
+                        existingItem.Children.Add(item);
+                    }
+                    else
+                    {
+                        result.Add(item);
+                    }
+                }
+            });
+
+            return result;
+        }
+
+        /// <summary> 
+        /// 画面更新　押下イベント
+        /// </summary> 
+        public async Task<DataTable> CreateJobList(List<JobUnyoCtlModel> targetList)
+        {
+            return new DataTable();
         }
     }
 }

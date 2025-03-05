@@ -19,9 +19,8 @@ namespace JobManagementApp.Manager
         //public DICSSLORA.ACmnOra.clsMngOracle pobjOraDb; // データベース
         public string pstrCurDir;    // カレントディレクトリ
 
-#pragma warning disable IDE0044 // 読み取り専用修飾子を追加します
         private static DatabaseManager _instance;
-#pragma warning restore IDE0044 
+
         private static readonly object _lock = new object();
 
         public DICSSLORA.ACmnOra.clsMngOracle pobjOraDb { get; private set; }

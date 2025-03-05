@@ -453,6 +453,9 @@ namespace JobManagementApp.Services
         #region MAIN画面読み込み
         public static DataTable LoadJobs(string userId)
         {
+            // とりあえず全件
+            userId = "";
+
             DataTable dt = new DataTable();
             StringBuilder sql = new StringBuilder();
 
