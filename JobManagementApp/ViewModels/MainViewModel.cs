@@ -90,7 +90,6 @@ namespace JobManagementApp.ViewModels
         {
             // ボタンイベント 初期化
             _command = new MainCommand(this, IF);
-
             CacheUserCommand = new RelayCommand(_command.SaveUserButton_Click);
             RefreshCommand = new RelayCommand(_command.RefreshButton_Click);
             NewJobCommand = new RelayCommand(_command.NewJobButton_Click);
@@ -114,7 +113,7 @@ namespace JobManagementApp.ViewModels
             }
         }
 
-        // vm変更するとき
+        // VM変更検知
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string propertyName)
         {

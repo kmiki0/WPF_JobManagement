@@ -21,9 +21,6 @@ namespace JobManagementApp.Models
         Task<DataTable> CreateJobList(List<JobUnyoCtlModel> targetList);
     }
 
-    /// <summary> 
-    /// ユーザー保存　押下イベント
-    /// </summary> 
     public class MainModel : IMainModel
     {
         public bool SaveCacheUser(string userId)

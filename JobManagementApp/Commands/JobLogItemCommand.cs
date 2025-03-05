@@ -38,13 +38,9 @@ namespace JobManagementApp.Commands
         /// </summary> 
         private void LogDetailWindow_RequestClose(object sender, JobParamModel e)
         {
-            // TODO : Logwindow 再度表示
-            //JobLogViewModel vm = JobLogViewModel.GetInstance(e.Scenario, e.Eda);
-
             // JobLogWindow アクティブ
             System.Windows.Window jobLogWindow = WindowHelper.GetJobLogWindow();
             if (jobLogWindow != null) jobLogWindow.Activate();
         }
-
     }
 }

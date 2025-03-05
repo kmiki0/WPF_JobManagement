@@ -88,14 +88,16 @@ namespace JobManagementApp.ViewModels
         // 入れ子リスト
         public ObservableCollection<JobListItemViewModel> Children { get; set; }
 
-        // 実行ボタン
+        // 実行 ボタン
         public ICommand RunCommand { get; set; }
-        // 詳細ボタン
+        // 詳細 ボタン
         public ICommand DetailCommand { get; set; }
-        // ログボタン
+        // ログ ボタン
         public ICommand LogCommand { get; set; }
 
-        // Init
+        /// <summary>
+        /// Init
+        /// </summary>
         public JobListItemViewModel()
         {
             // 初期値 セット
@@ -103,10 +105,8 @@ namespace JobManagementApp.ViewModels
             UpdateDate = "";
             Children = new ObservableCollection<JobListItemViewModel>();
 
-            // コマンド 初期化
+            // ボタンイベント 初期化
             _command = new JobListItemCommand();
-
-            // コマンド 画面処理にセット
             RunCommand = new RelayCommand(_command.RunButton_Click);
             DetailCommand = new RelayCommand(_command.DetailButton_Click);
             LogCommand = new RelayCommand(_command.LogButton_Click);

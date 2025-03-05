@@ -29,7 +29,6 @@ namespace JobManagementApp.Commands
             {
                 JobService.UpdateUnyoCtrl(arg.scenario, arg.eda);
             }
-
         }
 
         /// <summary> 
