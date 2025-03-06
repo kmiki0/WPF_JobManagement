@@ -22,6 +22,9 @@ namespace JobManagementApp.ViewModels
         // JobDetailWindow
         public Window window;
 
+        // Closeイベント 上書き
+        public event EventHandler<JobListItemViewModel> RequestClose;
+
         // シナリオ
         public string Scenario { get; set; }
         // 枝番
@@ -85,138 +88,43 @@ namespace JobManagementApp.ViewModels
         // シナリオ　フォーカスアウト　
         public ICommand ScenarioLostFocusCommand { get; }
 
-        // Init
-        public JobDetailViewModel()
+        /// <summary>
+        /// Init（新規）
+        /// </summary>
+        public JobDetailViewModel(IJobDetailModel IF)
         {
             // 初期値 セット
             this.JobBoolean = true;
 
             // コマンド 初期化
-            _command = new JobDetailCommand();
-
-            // コマンド 画面処理にセット
-            UpdateCommand = new RelayCommand(UpdateButtonCommand);
-            CloseCommand = new RelayCommand(CloseButtonCommand);
-            DeleteCommand = new RelayCommand(DeleteButtonCommand);
-            ScenarioLostFocusCommand = new AsyncRelayCommand(ScenarioTextLostFocusCommnad);
+            _command = new JobDetailCommand(this, IF);
+            UpdateCommand = new RelayCommand(_command.UpdateButton_Click);
+            CloseCommand = new RelayCommand(_command.CloseButton_Click);
+            DeleteCommand = new RelayCommand(_command.DeleteButton_Click);
+            ScenarioLostFocusCommand = new RelayCommand(_command.ScenarioTextBox_LostFocus);
         }
 
-        public JobDetailViewModel(string scenario, string eda)
+        /// <summary>
+        /// Init（編集）
+        /// </summary>
+        public JobDetailViewModel(IJobDetailModel IF, string scenario, string eda)
         {
             // 引数をvmにセット
             this.Scenario = scenario;
             this.Eda = eda;
 
-            // データ取得して画面に表示
-            if (!string.IsNullOrEmpty(Scenario) && !string.IsNullOrEmpty(Eda))
-            {
-                SetJobDetailViewModel();
-            }
-
             // コマンド 初期化
-            _command = new JobDetailCommand();
+            _command = new JobDetailCommand(this, IF);
+            UpdateCommand = new RelayCommand(_command.UpdateButton_Click);
+            CloseCommand = new RelayCommand(_command.CloseButton_Click);
+            DeleteCommand = new RelayCommand(_command.DeleteButton_Click);
 
-            // コマンド 画面処理にセット
-            UpdateCommand = new RelayCommand(UpdateButtonCommand);
-            CloseCommand = new RelayCommand(CloseButtonCommand);
-            DeleteCommand = new RelayCommand(DeleteButtonCommand);
-        }
-
-
-        //シナリオと枝番からデータ取得
-        public void SetJobDetailViewModel()
-        {
-            //ジョブ管理の取得
-            DataTable dt = JobService.GetJobManegment(Scenario, Eda);
-
-            if (dt.Rows.Count > 0)
+            // データ取得して画面に表示
+            if (!string.IsNullOrEmpty(this.Scenario) && !string.IsNullOrEmpty(this.Eda))
             {
-                Scenario = dt.Rows[0]["SCENARIO"].ToString();
-                Eda = dt.Rows[0]["EDA"].ToString();
-                Id = dt.Rows[0]["ID"].ToString();
-                Name = dt.Rows[0]["NAME"].ToString();
-                SelectedExecution = (emExecution)int.Parse(dt.Rows[0]["EXECUTION"].ToString());
-                ExecCommnad = dt.Rows[0]["ExecCommnad"].ToString();
-                SelectedStatus = (emStatus)int.Parse(dt.Rows[0]["STATUS"].ToString());
-                BeforeJob = dt.Rows[0]["BeforeJob"].ToString();
-                JobBoolean = int.Parse(dt.Rows[0]["JOBBOOLEAN"].ToString()) != 0;
-                Receive = dt.Rows[0]["Receive"].ToString();
-                Send = dt.Rows[0]["SEND"].ToString();
-                Memo = dt.Rows[0]["MEMO"].ToString().Replace("\\n", Environment.NewLine);
+                _command.LoadViewModel();
             }
         }
-
-        //ボタン　クリックイベント
-        // 登録ボタン
-        private void UpdateButtonCommand(object parameter)
-        {
-            var jobManegment = new JobManegment
-            {
-                SCENARIO = Scenario,
-                EDA = Eda,
-                ID = Id,
-                NAME = (Name is null) ? "" : Name,
-                EXECUTION = (int)SelectedExecution,
-                EXECCOMMNAD = (ExecCommnad is null) ? "" : ExecCommnad,
-                STATUS = (int)SelectedStatus,
-                BEFOREJOB = (BeforeJob is null) ? "" : BeforeJob,
-                JOBBOOLEAN = JobBoolean ? 1 : 0,
-                RECEIVE = (Receive is null) ? "" : Receive,
-                SEND = (Send is null) ? "" : Send,
-                MEMO = (Memo is null) ? "" : Memo.Replace(Environment.NewLine, "\\n")
-            };
-
-            if (JobService.UpdateJobManegment(jobManegment))
-            {
-                MessageBox.Show("ジョブ管理の更新が完了しました。");
-                CloseButtonCommand(null);
-            }
-        }
-
-        public event EventHandler<JobListItemViewModel> RequestClose;
-
-        // 閉じるボタン
-        private void CloseButtonCommand(object parameter)
-        {
-            // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
-            RequestClose?.Invoke(this, new JobListItemViewModel {
-                Scenario = this.Scenario,
-                Eda = this.Eda,
-                Id = this.Id,
-                Name = this.Name,
-                Execution = this.SelectedExecution,
-                JobBoolean = this.JobBoolean,
-                Status = this.SelectedStatus,
-            });
-
-            if (window != null)
-            {
-                window.Close();
-            }
-        }
-
-        // 削除ボタン
-        private void DeleteButtonCommand(object parameter)
-        {
-            if (JobService.DeleteJobManegment(Scenario, Eda))
-            {
-                MessageBox.Show("ジョブ管理の論理削除フラグを立てました");
-                CloseButtonCommand(null);
-            }
-        }
-
-        // シナリオ　フォーカスアウト
-        private async Task ScenarioTextLostFocusCommnad(object parameter)
-        {
-            if (Scenario != null)
-            {
-                // 枝番　設定
-                await Task.Run(() => 
-                    _command.OnTextBoxLostFocus(this.Scenario, eda => this.Eda = eda)
-                );
-            }
-        }
-
 
         // VM変更検知
         public event PropertyChangedEventHandler PropertyChanged;

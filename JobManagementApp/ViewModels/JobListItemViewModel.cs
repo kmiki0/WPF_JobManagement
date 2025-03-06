@@ -106,7 +106,7 @@ namespace JobManagementApp.ViewModels
             Children = new ObservableCollection<JobListItemViewModel>();
 
             // ボタンイベント 初期化
-            _command = new JobListItemCommand();
+            _command = new JobListItemCommand(this);
             RunCommand = new RelayCommand(_command.RunButton_Click);
             DetailCommand = new RelayCommand(_command.DetailButton_Click);
             LogCommand = new RelayCommand(_command.LogButton_Click);

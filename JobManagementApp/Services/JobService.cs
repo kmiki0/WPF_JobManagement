@@ -143,8 +143,7 @@ namespace JobManagementApp.Services
                 sql.Append("group by SCENARIO");
 
                 // SQL取得
-                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
-                if (pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                if (DatabaseManager.Instance.pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }

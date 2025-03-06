@@ -72,7 +72,7 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void NewJobButton_Click(object _)
         {
-            var vm = new JobDetailViewModel();
+            var vm = new JobDetailViewModel(new JobDetailModel());
             //vm.RequestClose += DetailWindow_RequestClose;
             var detailWindow = new JobDetailWindow(vm);
             var window = detailWindow as Window;
