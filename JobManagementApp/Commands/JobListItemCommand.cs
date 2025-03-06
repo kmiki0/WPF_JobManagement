@@ -81,7 +81,7 @@ namespace JobManagementApp.Commands
             var window = logWindow as System.Windows.Window;
             // ウィンドウの表示位置　調整
             WindowHelper.SetWindowLocation(ref window);
-            JobLogViewModel vm = new JobLogViewModel(arg.scenario, arg.eda);
+            JobLogViewModel vm = new JobLogViewModel(new JobLogModel(), arg.scenario, arg.eda);
             logWindow.Closed += LogWindow_Closed;
             vm.window = logWindow;
             logWindow.DataContext = vm;

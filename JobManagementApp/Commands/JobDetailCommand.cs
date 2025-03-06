@@ -24,7 +24,7 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary> 
-        /// シナリオ　フォーカスアウト処理
+        /// 画面項目 読み込み処理
         /// </summary> 
         public void LoadViewModel()
         {
@@ -47,7 +47,7 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary> 
-        /// シナリオ　フォーカスアウト処理
+        /// 登録ボタン クリック処理
         /// </summary> 
         public void UpdateButton_Click(object _)
         {
@@ -85,7 +85,7 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary> 
-        /// シナリオ　フォーカスアウト処理
+        /// 閉じるボタン クリック処理
         /// </summary> 
         public void CloseButton_Click(object _)
         {
@@ -108,7 +108,7 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary> 
-        /// シナリオ　フォーカスアウト処理
+        /// 削除ボタン クリック処理
         /// </summary> 
         public void DeleteButton_Click(object _)
         {

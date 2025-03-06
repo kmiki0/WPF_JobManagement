@@ -15,7 +15,7 @@ namespace JobManagementApp.Models
     {
         // シナリオから登録可能な枝番 取得
         Task<int> GetNewEda(string scenario);
-        // ジョブ管理テーブル 更新
+        // ジョブ管理テーブル 取得
         Task<JobManegment> GetJobManegment(string scenario, string eda);
         // ジョブ管理テーブル 更新
         Task<bool> UpdateJobManegment(JobManegment job);

@@ -84,7 +84,7 @@
                                         <Setter Property="Background" Value="PaleGreen"/>
                                     </DataTrigger>
                                     <!-- 異常終了 -->
-                                    <DataTrigger Binding="{Binding Status}" Value="9">
+                                    <DataTrigger Binding="{Binding Status}" Value="3">
                                         <Setter Property="Background" Value="Salmon"/>
                                     </DataTrigger>
 

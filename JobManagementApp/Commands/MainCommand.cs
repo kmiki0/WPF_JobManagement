@@ -30,6 +30,9 @@ namespace JobManagementApp.Commands
             Init();
         }
 
+        /// <summary> 
+        /// 初期化
+        /// </summary> 
         private void Init()
         {
             // キャッシュ読み込み
@@ -172,16 +175,17 @@ namespace JobManagementApp.Commands
                     // 更新日付が本日日付のみ処理
                     if (updateDate.ToString("yyyyMMdd") == DateTime.Now.ToString("yyyyMMdd"))
                     {
-                        var obj = new JobUnyoCtlModel
+                        // eunm 対応 （ERROR = 3）
+                        var flg = row["SYRFLG"].ToString();
+
+                        unyoDataList.Add(new JobUnyoCtlModel
                         {
                             Scenario = row["SCENARIO"].ToString(),
                             Eda = row["EDA"].ToString(),
                             Id = row["JOBID"].ToString(),
-                            SyrFlg = row["SYRFLG"].ToString(),
+                            SyrFlg = flg == "9" ? "3" : flg,
                             UpdDt = row["UPDDT"].ToString(),
-                        };
-
-                        unyoDataList.Add(obj);
+                        });
                     }
                 }
             }
