@@ -120,12 +120,12 @@ namespace JobManagementApp.Commands
                 {
                     // vmの値を更新
                     _vm.TempSavePath = path;
-                    MessageBox.Show("キャッシュに保存しました。");
+                    MessageBox.Show("キャッシュに保存しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
             }
             else
             {
-                MessageBox.Show("入力されているフォルダ名が正しくありません。");
+                MessageBox.Show("入力されているフォルダ名が正しくありません。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
             }
         }
 
@@ -162,7 +162,7 @@ namespace JobManagementApp.Commands
             }
             else
             {
-                MessageBox.Show("フォルダが生成されていません。");
+                MessageBox.Show("フォルダが生成されていません。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
             }
         }
 
@@ -229,7 +229,7 @@ namespace JobManagementApp.Commands
             }
             catch (Exception)
             {
-                MessageBox.Show($"{Path.Combine(log.FilePath, log.FileName)} にアクセス出来ませんでした。");
+                MessageBox.Show($"{Path.Combine(log.FilePath, log.FileName)} にアクセス出来ませんでした。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 //throw;
             }
         }
@@ -262,7 +262,7 @@ namespace JobManagementApp.Commands
             }
             catch (Exception)
             {
-                MessageBox.Show($"{Path.Combine(log.FilePath, log.FileName)} にアクセス出来ませんでした。");
+                MessageBox.Show($"{Path.Combine(log.FilePath, log.FileName)} にアクセス出来ませんでした。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 //throw;
             }
         }

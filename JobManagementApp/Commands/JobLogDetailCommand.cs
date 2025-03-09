@@ -84,18 +84,18 @@ namespace JobManagementApp.Commands
                     {
                         if (y.Result)
                         {
-                            MessageBox.Show("ジョブ関連ファイルの更新が完了しました。");
+                            MessageBox.Show("ジョブ関連ファイルの更新が完了しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                             _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
                         }
                         else
                         {
-                            MessageBox.Show("ジョブ関連ファイルの更新に失敗しました。");
+                            MessageBox.Show("ジョブ関連ファイルの更新に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                         }
                     });
                 }
                 else
                 {
-                    MessageBox.Show("ジョブ関連ファイルの削除に失敗しました。");
+                    MessageBox.Show("ジョブ関連ファイルの削除に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
             });
         }
@@ -121,12 +121,12 @@ namespace JobManagementApp.Commands
             {
                 if (x.Result)
                 {
-                    MessageBox.Show("ジョブ関連ファイルの削除しました。");
+                    MessageBox.Show("ジョブ関連ファイルの削除しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                     _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
                 }
                 else
                 {
-                    MessageBox.Show("ジョブ関連ファイルの削除に失敗しました。");
+                    MessageBox.Show("ジョブ関連ファイルの削除に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
             });
         }

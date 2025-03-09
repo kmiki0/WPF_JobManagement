@@ -56,11 +56,11 @@ namespace JobManagementApp.Commands
         {
             if (_if.SaveCacheUser(_vm.UserId))
             {
-                MessageBox.Show("キャッシュに保存しました。");
+                MessageBox.Show("キャッシュに保存しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
             }
             else
             {
-                MessageBox.Show("キャッシュに保存に失敗しました。");
+                MessageBox.Show("キャッシュに保存に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
             }
         }
 

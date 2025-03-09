@@ -28,10 +28,11 @@ namespace JobManagementApp.Commands
             var arg = ConvertParameter(parameter);
             // メッセージボックスを表示
             DialogResult result = MessageBox.Show(
-                "運用処理管理Rを更新しますか？", 
+                "運用処理管理Rを更新します。\n本当によろしいですか？", 
                 "確認", 
                 MessageBoxButtons.YesNo, 
-                MessageBoxIcon.Question
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2
             );
 
             // ユーザーが「はい」を選択した場合の処理

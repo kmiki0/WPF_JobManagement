@@ -73,13 +73,25 @@ namespace JobManagementApp.Commands
             {
                 if (x.Result)
                 {
-                    MessageBox.Show("ジョブ管理の更新が完了しました。");
+                    MessageBox.Show("ジョブ管理の更新が完了しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
+                    //_vm.RequestClose.Invoke(_vm, new JobListItemViewModel
+                    //{
+                    //    Scenario = _vm.Scenario,
+                    //    Eda = _vm.Eda,
+                    //    Id = _vm.Id,
+                    //    Name = _vm.Name,
+                    //    Execution = _vm.SelectedExecution,
+                    //    JobBoolean = _vm.JobBoolean,
+                    //    Status = _vm.SelectedStatus,
+                    //});
+
                     // 自身を閉じる
-                    CloseButton_Click(null);
+                    _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
                 }
                 else
                 {
-                    MessageBox.Show("ジョブ管理の更新に失敗しました。");
+                    MessageBox.Show("ジョブ管理の更新に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
             });
         }
@@ -89,22 +101,7 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void CloseButton_Click(object _)
         {
-            // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
-            //_vm.RequestClose?.Invoke(_vm, new JobListItemViewModel
-            //{
-            //    Scenario = _vm.Scenario,
-            //    Eda = _vm.Eda,
-            //    Id = _vm.Id,
-            //    Name = _vm.Name,
-            //    Execution = _vm.SelectedExecution,
-            //    JobBoolean = _vm.JobBoolean,
-            //    Status = _vm.SelectedStatus,
-            //});
-
-            if (_vm.window != null)
-            {
-                _vm.window.Close();
-            }
+            _vm.window?.Close();
         }
 
         /// <summary> 
@@ -117,13 +114,13 @@ namespace JobManagementApp.Commands
             {
                 if (x.Result)
                 {
-                    MessageBox.Show("ジョブ管理の論理削除フラグを立てました");
+                    MessageBox.Show("ジョブ管理の論理削除フラグを立てました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                     // 自身を閉じる
-                    CloseButton_Click(null);
+                    _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
                 }
                 else
                 {
-                    MessageBox.Show("ジョブ管理の削除に失敗しました。");
+                    MessageBox.Show("ジョブ管理の削除に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
             });
         }
