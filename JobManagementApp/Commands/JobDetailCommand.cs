@@ -51,6 +51,10 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void UpdateButton_Click(object _)
         {
+            // ボタン処理可能か
+            if (!_vm.IsButtonEnabled) return;
+            _vm.IsButtonEnabled = false;
+
             // テーブル型に格納
             var job = new JobManegment
             {
@@ -93,6 +97,8 @@ namespace JobManagementApp.Commands
                 {
                     MessageBox.Show("ジョブ管理の更新に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
+
+                _vm.IsButtonEnabled = true;
             });
         }
 
@@ -101,6 +107,9 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void CloseButton_Click(object _)
         {
+            // ボタン処理可能か
+            if (!_vm.IsButtonEnabled) return;
+
             _vm.window?.Close();
         }
 
@@ -109,6 +118,10 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void DeleteButton_Click(object _)
         {
+            // ボタン処理可能か
+            if (!_vm.IsButtonEnabled) return;
+            _vm.IsButtonEnabled = false;
+
             // 削除処理 実施
             _if.DeleteJobManegment(_vm.Scenario, _vm.Eda).ContinueWith(x =>
             {
@@ -122,6 +135,8 @@ namespace JobManagementApp.Commands
                 {
                     MessageBox.Show("ジョブ管理の削除に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
+
+                _vm.IsButtonEnabled = true;
             });
         }
 

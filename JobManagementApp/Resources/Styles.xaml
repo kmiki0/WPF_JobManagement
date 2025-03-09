@@ -9,6 +9,12 @@
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="Margin" Value="0"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsButtonEnabled}" Value="false">
+                <Setter Property="Background" Value="DarkGray" />
+                <Setter Property="IsEnabled" Value="False" />
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="RunStyleButton" TargetType="Button">

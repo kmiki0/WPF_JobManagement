@@ -70,6 +70,10 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void UpdateButton_Click(object _)
         {
+            // ボタン処理可能か
+            if (!_vm.IsButtonEnabled) return;
+            _vm.IsButtonEnabled = false;
+
             // 関連ファイル型に画面項目をセット
             JobLinkFile job = SetJobLinkFileFromVm();
 
@@ -97,6 +101,8 @@ namespace JobManagementApp.Commands
                 {
                     MessageBox.Show("ジョブ関連ファイルの削除に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
+
+                _vm.IsButtonEnabled = true;
             });
         }
 
@@ -105,6 +111,9 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void CloseButton_Click(object _)
         {
+            // ボタン処理可能か
+            if (!_vm.IsButtonEnabled) return;
+
             _vm.window?.Close();
         }
 
@@ -113,6 +122,10 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void DeleteButton_Click(object _)
         {
+            // ボタン処理可能か
+            if (!_vm.IsButtonEnabled) return;
+            _vm.IsButtonEnabled = false;
+
             // 関連ファイル型に画面項目をセット
             JobLinkFile job = SetJobLinkFileFromVm();
 
@@ -128,6 +141,8 @@ namespace JobManagementApp.Commands
                 {
                     MessageBox.Show("ジョブ関連ファイルの削除に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
+
+                _vm.IsButtonEnabled = true;
             });
         }
 

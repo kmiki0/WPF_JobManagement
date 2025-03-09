@@ -160,12 +160,26 @@ namespace JobManagementApp.ViewModels
         // シナリオ　フォーカスアウト　
         public ICommand ScenarioLostFocusCommand { get; }
 
+        // ボタン処理可能
+        private bool _isButtonEnabled;
+        public bool IsButtonEnabled
+        {
+            get { return _isButtonEnabled; }
+            set
+            {
+                _isButtonEnabled = value;
+                OnPropertyChanged(nameof(IsButtonEnabled));
+            }
+        }
+
+
         /// <summary>
         /// Init（新規）
         /// </summary>
         public JobDetailViewModel(IJobDetailModel IF)
         {
-            // 初期値 セット
+            // 初期値セット
+            this.IsButtonEnabled = true;
             this.JobBoolean = true;
 
             // コマンド 初期化
@@ -181,7 +195,8 @@ namespace JobManagementApp.ViewModels
         /// </summary>
         public JobDetailViewModel(IJobDetailModel IF, string scenario, string eda)
         {
-            // 引数をvmにセット
+            // 初期値セット
+            this.IsButtonEnabled = true;
             this.Scenario = scenario;
             this.Eda = eda;
 

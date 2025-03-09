@@ -60,11 +60,23 @@ namespace JobManagementApp.ViewModels
         // 閉じるボタン
         public ICommand CloseCommand { get; set; }
 
+        // ボタン処理可能
+        private bool _isButtonEnabled;
+        public bool IsButtonEnabled
+        {
+            get { return _isButtonEnabled; }
+            set
+            {
+                _isButtonEnabled = value;
+                OnPropertyChanged(nameof(IsButtonEnabled));
+            }
+        }
 
         // 新規作成の場合
         public JobLogDetailViewModel(IJobLogDetailModel IF, string scenario, string eda)
         {
             // 初期値セット
+            this.IsButtonEnabled = true;
             this.Scenario = scenario;
             this.Eda = eda;
             this.ObserverType = true;
@@ -83,6 +95,7 @@ namespace JobManagementApp.ViewModels
         public JobLogDetailViewModel(IJobLogDetailModel IF, string scenario, string eda, string fileName, string filePath)
         {
             // 初期値セット
+            this.IsButtonEnabled = true;
             this.Scenario = scenario;
             this.Eda = eda;
             this.FileName = fileName;
