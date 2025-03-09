@@ -13,7 +13,7 @@ namespace JobManagementApp.ViewModels
     public class JobLogItemViewModel : INotifyPropertyChanged
     {
         // イベント処理
-        private readonly JobLogItemCommand _jobLogItemCommand;
+        private readonly JobLogItemCommand _command;
 
         // シナリオ
         public string Scenario { get; set; }
@@ -83,14 +83,9 @@ namespace JobManagementApp.ViewModels
 
         public JobLogItemViewModel()
         {
-            _jobLogItemCommand = new JobLogItemCommand();
-
-            EditCommand = new RelayCommand(EditButton_Click);
-        }
-
-        private void EditButton_Click(object parameter)
-        {
-            _jobLogItemCommand.EditButtonCommand(parameter);
+            // コマンド 初期化
+            _command = new JobLogItemCommand(this);
+            EditCommand = new RelayCommand(_command.EditButton_Click);
         }
 
         // vm変更するとき

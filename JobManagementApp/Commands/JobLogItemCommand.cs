@@ -11,14 +11,20 @@ using JobManagementApp.Views;
 
 namespace JobManagementApp.Commands
 {
-    class JobLogItemCommand : JobCommandArgument
+    public class JobLogItemCommand : JobCommandArgument
     {
+        private readonly JobLogItemViewModel _vm;
+        public JobLogItemCommand(JobLogItemViewModel VM)
+        {
+            _vm = VM;
+        }
+
         /// <summary> 
         /// 編集ボタン　押下イベント
         /// </summary> 
-        public void EditButtonCommand(object parameter)
+        public void EditButton_Click(object prm)
         {
-            var jobPrm = parameter as JobParamModel;
+            var jobPrm = prm as JobParamModel;
 
             // ViewModel 生成
             JobLogDetailViewModel vm = new JobLogDetailViewModel(new JobLogDetailModel(), jobPrm.Scenario, jobPrm.Eda, jobPrm.FileName, jobPrm.FilePath);
