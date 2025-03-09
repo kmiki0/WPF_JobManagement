@@ -32,7 +32,6 @@ namespace JobManagementApp.Commands
             Init();
         }
 
-
         private static ConcurrentDictionary<string, SemaphoreSlim> fileSemaphores;
         private Dictionary<string, FileSystemWatcher> watchers;
 
@@ -53,8 +52,6 @@ namespace JobManagementApp.Commands
 
             // ログ一覧 読み込み
             LoadLogList();
-
-
         }
 
         // ログ一覧 読み込み
@@ -140,7 +137,7 @@ namespace JobManagementApp.Commands
             var jobPrm = prm as JobParamModel;
 
             // ViewModel 生成
-            JobLogDetailViewModel vm = new JobLogDetailViewModel(jobPrm.Scenario, jobPrm.Eda);
+            JobLogDetailViewModel vm = new JobLogDetailViewModel(new JobLogDetailModel(), jobPrm.Scenario, jobPrm.Eda);
             // 返却用のCloseイベント 上書き
             //vm.RequestClose += LogDetailWindow_RequestClose;
             JobLogDetailWindow logDetailWindow = new JobLogDetailWindow(vm);

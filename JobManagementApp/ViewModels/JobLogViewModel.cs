@@ -1,22 +1,9 @@
 ﻿using JobManagementApp.Commands;
-using JobManagementApp.Manager;
 using JobManagementApp.Models;
-using JobManagementApp.Services;
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Data;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Timers;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Threading;
 
 namespace JobManagementApp.ViewModels
 {
@@ -74,8 +61,6 @@ namespace JobManagementApp.ViewModels
         public ICommand AddLogCommand { get; set; }
 
 
-
-
         // シナリオと枝番に値がある場合、データ取得して画面に表示
         public JobLogViewModel(IJobLogModel IF, string scenario, string eda)
         {
@@ -83,53 +68,13 @@ namespace JobManagementApp.ViewModels
             this.Scenario = scenario;
             this.Eda = eda;
 
-
-
-
-
             // コマンド 初期化
             _command = new JobLogCommand(this, IF);
             TempFolderUpdateCommand = new RelayCommand(_command.TempFolderButton_Click);
             AddLogCommand = new RelayCommand(_command. AddLogButton_Click);
             FolderCommand = new RelayCommand(_command.FolderButton_Click);
             CloseCommand = new RelayCommand(_command.CloseButton_Click);
-
-            // ログファイル一覧 セット
-            //SetLogs();
         }
-
-
-        //private async void SetLogs()
-        //{
-            //await Task.Run(() =>
-            //{
-            //    _command.LoadLogList();
-            //});
-            //StartMonitoring();
-        //}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         // vm変更するとき
         public event PropertyChangedEventHandler PropertyChanged;

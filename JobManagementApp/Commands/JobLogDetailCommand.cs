@@ -14,42 +14,137 @@ namespace JobManagementApp.Commands
 {
     public class JobLogDetailCommand
     {
+        private readonly JobLogDetailViewModel _vm;
+        private readonly IJobLogDetailModel _if;
+
+        public JobLogDetailCommand(JobLogDetailViewModel VM, IJobLogDetailModel IF)
+        {
+            _vm = VM;
+            _if = IF;
+        }
+
+        /// <summary> 
+        /// ジョブログファイルの取得
+        /// </summary> 
+        public void SetJobLogDetailViewModel()
+        {
+            _if.GetJobLinkFile(_vm.Scenario, _vm.Eda, _vm.FileName, _vm.FilePath).ContinueWith(x =>
+            {
+                if (x.Result != null)
+                {
+                    _vm.Scenario = x.Result.SCENARIO;
+                    _vm.Eda = x.Result.EDA;
+                    _vm.JobId = x.Result.JOBID;
+                    _vm.FileName = x.Result.FILENAME;
+                    _vm.OldFileName = x.Result.FILENAME;
+                    _vm.FilePath = x.Result.FILEPATH;
+                    _vm.OldFilePath = x.Result.FILEPATH;
+                    _vm.SelectedFileType = (emFileType)x.Result.FILETYPE;
+                    _vm.ObserverType = x.Result.OBSERVERTYPE != 0;
+                }
+            });
+        }
+
+
+        /// <summary> 
+        /// JobID 取得
+        /// </summary> 
+        public void GetJobId()
+        {
+            _if.GetJobId(_vm.Scenario, _vm.Eda).ContinueWith(x =>
+            {
+                if (x.Result != "")
+                {
+                    _vm.JobId =  x.Result;
+                }
+                else
+                {
+                    // 取得出来ない場合
+                    _vm.JobId = "不明なPGID";
+                }
+            });
+        }
+
         /// <summary> 
         /// 更新ボタン　押下イベント
         /// </summary> 
-        public void UpdateButtonCommand(JobLinkFile job)
+        public void UpdateButton_Click(object _)
         {
-            // 物理削除
-            if (JobService.DeleteJobLinkFile(job))
+            // 関連ファイル型に画面項目をセット
+            JobLinkFile job = SetJobLinkFileFromVm();
+
+            // 削除
+            _if.DeleteJobLinkFile(job).ContinueWith(x =>
             {
-                // 登録
-                if (JobService.UpdateJobLinkFile(job))
+                // 削除完了したい場合のみ、登録処理
+                if (x.Result)
                 {
-                    MessageBox.Show("ジョブ関連ファイルの更新が完了しました。");
+                    // 登録
+                    _if.RegistJobLinkFile(job).ContinueWith(y =>
+                    {
+                        if (y.Result)
+                        {
+                            MessageBox.Show("ジョブ関連ファイルの更新が完了しました。");
+                            _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
+                        }
+                        else
+                        {
+                            MessageBox.Show("ジョブ関連ファイルの更新に失敗しました。");
+                        }
+                    });
                 }
-            }
+                else
+                {
+                    MessageBox.Show("ジョブ関連ファイルの削除に失敗しました。");
+                }
+            });
         }
 
         /// <summary> 
         /// 閉じるボタン　押下イベント
         /// </summary> 
-        public void CloseButtonCommand(Window window)
+        public void CloseButton_Click(object _)
         {
-            if (window != null)
-            {
-                window.Close();
-            }
+            _vm.window?.Close();
         }
 
         /// <summary> 
         /// 削除ボタン　押下イベント
         /// </summary> 
-        public void DeleteButtonCommand(JobLinkFile job)
+        public void DeleteButton_Click(object _)
         {
-            if (JobService.DeleteJobLinkFile(job))
+            // 関連ファイル型に画面項目をセット
+            JobLinkFile job = SetJobLinkFileFromVm();
+
+            // 削除
+            _if.DeleteJobLinkFile(job).ContinueWith(x =>
             {
-                MessageBox.Show("関連ファイルの削除が完了しました。");
-            }
+                if (x.Result)
+                {
+                    MessageBox.Show("ジョブ関連ファイルの削除しました。");
+                    _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
+                }
+                else
+                {
+                    MessageBox.Show("ジョブ関連ファイルの削除に失敗しました。");
+                }
+            });
+        }
+
+        // JobLinkFile に VM の値をセット
+        private JobLinkFile SetJobLinkFileFromVm()
+        {
+            return new JobLinkFile
+            {
+                SCENARIO = _vm.Scenario,
+                EDA = _vm.Eda,
+                FILENAME = _vm.FileName,
+                OLDFILENAME = _vm.OldFileName,
+                FILEPATH = _vm.FilePath,
+                OLDFILEPATH = _vm.OldFilePath,
+                FILETYPE = (int)_vm.SelectedFileType,
+                OBSERVERTYPE = _vm.ObserverType ? 1 : 0,
+            };
         }
     }
 }

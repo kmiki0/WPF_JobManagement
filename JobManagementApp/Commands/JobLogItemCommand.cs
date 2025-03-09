@@ -21,7 +21,7 @@ namespace JobManagementApp.Commands
             var jobPrm = parameter as JobParamModel;
 
             // ViewModel 生成
-            JobLogDetailViewModel vm = new JobLogDetailViewModel(jobPrm.Scenario, jobPrm.Eda, jobPrm.FileName, jobPrm.FilePath);
+            JobLogDetailViewModel vm = new JobLogDetailViewModel(new JobLogDetailModel(), jobPrm.Scenario, jobPrm.Eda, jobPrm.FileName, jobPrm.FilePath);
             // 返却用のCloseイベント 上書き
             vm.RequestClose += LogDetailWindow_RequestClose;
             JobLogDetailWindow logDetailWindow = new JobLogDetailWindow(vm);

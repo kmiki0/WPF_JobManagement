@@ -35,6 +35,8 @@ namespace JobManagementApp.Commands
         /// </summary> 
         private void Init()
         {
+            _vm.DisplayUpdateDate = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+
             // キャッシュ読み込み
             UserFileManager manager = new UserFileManager();
             _vm.UserId = manager.GetUserFilePath(manager.CacheKey_UserId);

@@ -39,21 +39,93 @@ namespace JobManagementApp.ViewModels
             }
         }
         // ジョブID
-        public string Id { get; set; }
+        private string _id { get; set; }
+        public string Id
+        {
+            get { return _id; }
+            set
+            {
+                _id = value;
+                OnPropertyChanged(nameof(Id));
+            }
+        }
         // ジョブ名
-        public string Name { get; set; }
+        private string _name { get; set; }
+        public string Name
+        {
+            get { return _name; }
+            set
+            {
+                _name = value;
+                OnPropertyChanged(nameof(Name));
+            }
+        }
         // cmd実行方法
-        public string ExecCommnad { get; set; }
+        private string _execCommnad { get; set; }
+        public string ExecCommnad
+        {
+            get { return _execCommnad; }
+            set
+            {
+                _execCommnad = value;
+                OnPropertyChanged(nameof(ExecCommnad));
+            }
+        }
         // 前続ジョブ
-        public string BeforeJob { get; set; }
+        private string _beforeJob { get; set; }
+        public string BeforeJob
+        {
+            get { return _beforeJob; }
+            set
+            {
+                _beforeJob = value;
+                OnPropertyChanged(nameof(BeforeJob));
+            }
+        }
         // ジョブ実行可否
-        public bool JobBoolean { get; set; }
+        private bool _jobBoolean { get; set; }
+        public bool JobBoolean
+        {
+            get { return _jobBoolean; }
+            set
+            {
+                _jobBoolean = value;
+                OnPropertyChanged(nameof(JobBoolean));
+            }
+        }
         // 受信先
-        public string Receive { get; set; }
+        private string _receive { get; set; }
+        public string Receive
+        {
+            get { return _receive; }
+            set
+            {
+                _receive = value;
+                OnPropertyChanged(nameof(Receive));
+            }
+        }
         // 送信先
-        public string Send { get; set; }
+        private string _send { get; set; }
+        public string Send
+        {
+            get { return _send; }
+            set
+            {
+                _send = value;
+                OnPropertyChanged(nameof(Send));
+            }
+        }
         // メモ
-        public string Memo { get; set; }
+        private string _memo { get; set; }
+        public string Memo
+        {
+            get { return _memo; }
+            set
+            {
+                _memo = value;
+                OnPropertyChanged(nameof(Memo));
+            }
+        }
         // ジョブ実行方法 コンボボックス
         public Array cmbExecution => Enum.GetValues(typeof(emExecution));
         private emExecution _selectedExecution;
