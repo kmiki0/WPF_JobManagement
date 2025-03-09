@@ -139,7 +139,7 @@ namespace JobManagementApp.Commands
             // ViewModel 生成
             JobLogDetailViewModel vm = new JobLogDetailViewModel(new JobLogDetailModel(), jobPrm.Scenario, jobPrm.Eda);
             // 返却用のCloseイベント 上書き
-            //vm.RequestClose += LogDetailWindow_RequestClose;
+            vm.RequestClose += LogDetailWindow_RequestClose;
             JobLogDetailWindow logDetailWindow = new JobLogDetailWindow(vm);
             var window = logDetailWindow as System.Windows.Window;
             // ウィンドウの表示位置　調整
@@ -148,6 +148,15 @@ namespace JobManagementApp.Commands
             logDetailWindow.DataContext = vm;
             logDetailWindow.ShowDialog();
         }
+        /// <summary> 
+        /// ログ編集ウィンドウ Closeイベント
+        /// </summary> 
+        private void LogDetailWindow_RequestClose(object sender, JobParamModel e)
+        {
+            // MainViewModelに通知するための処理を追加
+            JobLogViewModel.RecreateViewModel(e);
+        }
+
 
         /// <summary> 
         /// ファイルを開くボタン クリック処理
@@ -181,6 +190,16 @@ namespace JobManagementApp.Commands
                 }
             }
         }
+
+        /// <summary> 
+        /// ViewModel　再作成
+        /// </summary> 
+        //public void RecreateViewModel(JobParamModel job)
+        //{
+        //    var newViewModel = new JobLogViewModel(_if, job.Scenario, job.Eda);
+        //    _vm = newViewModel;
+        //    Application.Current.jo.DataContext = newViewModel;
+        //}
 
 
 

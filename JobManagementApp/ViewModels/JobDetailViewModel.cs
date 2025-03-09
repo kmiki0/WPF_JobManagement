@@ -213,6 +213,24 @@ namespace JobManagementApp.ViewModels
             }
         }
 
+        /// <summary>
+        /// 返却用 Closeイベント
+        /// </summary>
+        public void RequestClose_event()
+        {
+            // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
+            this.RequestClose.Invoke(this, new JobListItemViewModel
+            {
+                Scenario = this.Scenario,
+                Eda = this.Eda,
+                Id = this.Id,
+                Name = this.Name,
+                Execution = this.SelectedExecution,
+                JobBoolean = this.JobBoolean,
+                Status = this.SelectedStatus,
+            });
+        }
+
         // VM変更検知
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string propertyName)

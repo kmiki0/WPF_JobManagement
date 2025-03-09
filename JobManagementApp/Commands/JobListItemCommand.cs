@@ -66,10 +66,6 @@ namespace JobManagementApp.Commands
         {
             // MainViewModelに通知するための処理を追加
             MainViewModel.Instance.UpdateJobs(e);
-
-            // MainWindow アクティブ
-            System.Windows.Window mainWindow = WindowHelper.GetMainWindow();
-            if (mainWindow != null) mainWindow.Activate();
         }
 
         /// <summary> 

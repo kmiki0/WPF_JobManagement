@@ -22,7 +22,7 @@ namespace JobManagementApp.Views
         {
             InitializeComponent();
             // WindowのCloseイベントに追加
-            vm.RequestClose += (s, e) => Close();
+            vm.RequestClose += (s, e) => this?.Dispatcher.Invoke(() => this.Close());
         }
     }
 }

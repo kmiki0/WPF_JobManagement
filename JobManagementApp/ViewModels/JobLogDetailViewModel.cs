@@ -111,6 +111,19 @@ namespace JobManagementApp.ViewModels
             _command.SetJobLogDetailViewModel();
         }
 
+        /// <summary>
+        /// 返却用 Closeイベント
+        /// </summary>
+        public void RequestClose_event()
+        {
+            // JobLogDetailの値をEventHandler<JobParamModel>型でセット
+            this.RequestClose.Invoke(this, new JobParamModel
+            {
+                Scenario = this.Scenario,
+                Eda = this.Eda,
+            });
+        }
+
         // Vm変更するとき
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string propertyName)

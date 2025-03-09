@@ -1,5 +1,7 @@
 ﻿using JobManagementApp.Commands;
+using JobManagementApp.Helpers;
 using JobManagementApp.Models;
+using JobManagementApp.Views;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
@@ -74,6 +76,30 @@ namespace JobManagementApp.ViewModels
             AddLogCommand = new RelayCommand(_command. AddLogButton_Click);
             FolderCommand = new RelayCommand(_command.FolderButton_Click);
             CloseCommand = new RelayCommand(_command.CloseButton_Click);
+        }
+
+        /// <summary> 
+        /// ViewModel　再作成
+        /// </summary> 
+        public static void RecreateViewModel(JobParamModel job)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var oldWindow = WindowHelper.GetJobLogWindow();
+
+                // 新しく生成
+                var newVm = new JobLogViewModel(new JobLogModel(), job.Scenario, job.Eda);
+                var newWindow = new JobLogWindow
+                {
+                    Left = oldWindow.Left,
+                    Top = oldWindow.Top,
+                    DataContext = newVm,
+                };
+                newVm.window = newWindow; 
+                newWindow.Show();
+
+                oldWindow?.Close();
+            });
         }
 
         // vm変更するとき

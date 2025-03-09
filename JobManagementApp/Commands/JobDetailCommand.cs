@@ -79,16 +79,7 @@ namespace JobManagementApp.Commands
                 {
                     MessageBox.Show("ジョブ管理の更新が完了しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                     // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
-                    //_vm.RequestClose.Invoke(_vm, new JobListItemViewModel
-                    //{
-                    //    Scenario = _vm.Scenario,
-                    //    Eda = _vm.Eda,
-                    //    Id = _vm.Id,
-                    //    Name = _vm.Name,
-                    //    Execution = _vm.SelectedExecution,
-                    //    JobBoolean = _vm.JobBoolean,
-                    //    Status = _vm.SelectedStatus,
-                    //});
+                    _vm.RequestClose_event();
 
                     // 自身を閉じる
                     _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());

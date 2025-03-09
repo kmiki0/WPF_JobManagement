@@ -89,6 +89,7 @@ namespace JobManagementApp.Commands
                         if (y.Result)
                         {
                             MessageBox.Show("ジョブ関連ファイルの更新が完了しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                            _vm.RequestClose_event();
                             _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
                         }
                         else
@@ -135,6 +136,7 @@ namespace JobManagementApp.Commands
                 if (x.Result)
                 {
                     MessageBox.Show("ジョブ関連ファイルの削除しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    _vm.RequestClose_event();
                     _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
                 }
                 else

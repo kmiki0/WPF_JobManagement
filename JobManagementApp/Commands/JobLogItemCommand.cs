@@ -44,9 +44,8 @@ namespace JobManagementApp.Commands
         /// </summary> 
         private void LogDetailWindow_RequestClose(object sender, JobParamModel e)
         {
-            // JobLogWindow アクティブ
-            System.Windows.Window jobLogWindow = WindowHelper.GetJobLogWindow();
-            if (jobLogWindow != null) jobLogWindow.Activate();
+            // MainViewModelに通知するための処理を追加
+            JobLogViewModel.RecreateViewModel(e);
         }
     }
 }
