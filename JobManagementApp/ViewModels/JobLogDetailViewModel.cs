@@ -51,7 +51,16 @@ namespace JobManagementApp.ViewModels
             }
         }
         // 監視タイプ（自動・手動）
-        public bool ObserverType { get; set; }
+        private bool _observerType { get; set; }
+        public bool ObserverType
+        {
+            get { return _observerType; }
+            set
+            {
+                _observerType = value;
+                OnPropertyChanged(nameof(ObserverType));
+            }
+        }
 
         // 登録ボタン
         public ICommand UpdateCommand { get; set; }
@@ -76,6 +85,7 @@ namespace JobManagementApp.ViewModels
         public JobLogDetailViewModel(IJobLogDetailModel IF, string scenario, string eda)
         {
             // 初期値セット
+            this.ObserverType = true;
             this.IsButtonEnabled = true;
             this.Scenario = scenario;
             this.Eda = eda;

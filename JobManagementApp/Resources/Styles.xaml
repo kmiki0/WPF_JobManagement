@@ -67,6 +67,11 @@
         </Style.Triggers>
     </Style>
 
+    <Style x:Key="RadioStyle"  TargetType="RadioButton">
+        <Setter Property="Width" Value="100" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
     <!-- 登録, 削除, 閉じる, その他　ボタンのスタイル -->
      <Style x:Key="CommandButtonBorder" TargetType="Border">
         <Setter Property="CornerRadius" Value="4"/>

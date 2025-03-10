@@ -6,7 +6,8 @@
     <Window.Resources>
         <local:ExecutionToJapaneseConverter x:Key="executionToJapaneseConverter"/>
         <local:StatusToJapaneseConverter x:Key="statusToJapaneseConverter"/>
-
+        <local:BoolToRadioButtonConverter x:Key="boolToRadioButtonConverter"/>
+        
         <Style TargetType="Label">
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
@@ -44,33 +45,6 @@
             <Setter Property="HorizontalAlignment" Value="Left" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-
-        <Style x:Key="RunRadioStyle"  TargetType="RadioButton">
-            <Setter Property="Width" Value="100" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding JobBoolean}" Value="True">
-                    <Setter Property="IsChecked" Value="True"/> 
-                </DataTrigger>
-                <DataTrigger Binding="{Binding JobBoolean}" Value="False">
-                    <Setter Property="IsChecked" Value="False"/> 
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="NotRunRadioStyle"  TargetType="RadioButton">
-            <Setter Property="Width" Value="100" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding JobBoolean}" Value="True">
-                    <Setter Property="IsChecked" Value="False"/> 
-                </DataTrigger>
-                <DataTrigger Binding="{Binding JobBoolean}" Value="False">
-                    <Setter Property="IsChecked" Value="True"/> 
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
 
         <Style x:Key="IsHiddenBorder" TargetType="Border">
             <Setter Property="CornerRadius" Value="4"/>
@@ -161,8 +135,8 @@
             <!-- ジョブ実行可否 -->
             <Label Grid.Row="8" Grid.Column="0" Content="ジョブ実行可否" />
             <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal">
-                <RadioButton Content="実行する" GroupName="Options" IsChecked="{Binding JobBoolean}" Style="{StaticResource RunRadioStyle}"/>
-                <RadioButton Content="実行しない" GroupName="Options" Style="{StaticResource NotRunRadioStyle}"/>
+                <RadioButton Content="実行する" Style="{StaticResource RadioStyle}" IsChecked="{Binding JobBoolean, Converter={StaticResource boolToRadioButtonConverter}, ConverterParameter=True}" GroupName="Options"/>
+                <RadioButton Content="実行しない" Style="{StaticResource RadioStyle}" IsChecked="{Binding JobBoolean, Converter={StaticResource boolToRadioButtonConverter}, ConverterParameter=False}" GroupName="Options"/>
             </StackPanel>
 
             <!-- 受信先 -->

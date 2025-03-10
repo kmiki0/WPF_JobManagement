@@ -94,6 +94,7 @@
     <Compile Include="Commands\JobLogDetailCommand.cs" />
     <Compile Include="Commands\JobLogItemCommand.cs" />
     <Compile Include="Commands\MainCommand.cs" />
+    <Compile Include="Helpers\BoolToRadioButtonConverter.cs" />
     <Compile Include="Helpers\ColumnIndexConverter.cs" />
     <Compile Include="Helpers\EnumTypeToJapaneseConverter.cs" />
     <Compile Include="Helpers\TextBoxBehaviors.cs" />
