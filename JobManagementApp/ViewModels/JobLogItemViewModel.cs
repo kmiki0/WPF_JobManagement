@@ -45,6 +45,17 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(UpdateDate));
             }
         }
+        // 行数
+        private string _lineCount { get; set; }
+        public string LineCount {
+            get => _lineCount;
+            set
+            {
+                _lineCount = value;
+                OnPropertyChanged(nameof(LineCount));
+            }
+        }
+
         // サイズ
         private string _size { get; set; }
         public string Size {

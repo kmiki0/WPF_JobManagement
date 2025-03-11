@@ -11,7 +11,7 @@
 
         <HierarchicalDataTemplate x:Key="JobListItemTemplate" ItemsSource="{Binding Children}">
 
-            <Border Background="WhiteSmoke" Margin="0, 5, 0, 5" BorderThickness="1" CornerRadius="3" >
+            <Border Background="WhiteSmoke" Margin="0, 5, 0, 5" BorderThickness="1" CornerRadius="3">
 
                 <StackPanel Orientation="Horizontal">
                     <!-- 実行ボタン -->
@@ -139,6 +139,7 @@
                 <ColumnDefinition Width="50" />
                 <ColumnDefinition Width="100" />
                 <ColumnDefinition Width="100" />
+                <ColumnDefinition Width="100" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="60" />
                 <ColumnDefinition Width="110" />
@@ -152,13 +153,21 @@
                     <TextBlock FontWeight="Bold" Text="ユーザー 保存"/>
                 </Button>
             </Border>
+            <!-- ツリー全て開く・閉じる -->
+            <!--<CheckBox Grid.Column="3" VerticalAlignment="Center" IsChecked="{Binding IsExpanded, Mode=TwoWay}">ツリー表示切替</CheckBox>-->
 
-            <Label Grid.Column="4" HorizontalAlignment="Right">更新日時</Label>
-            <TextBlock Grid.Column="5" Text="{Binding DisplayUpdateDate}" Margin="0, 0, 10, 0" Background="WhiteSmoke" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            <Label Grid.Column="5" HorizontalAlignment="Right">更新日時</Label>
+            <TextBlock Grid.Column="6" Text="{Binding DisplayUpdateDate}" Margin="0, 0, 10, 0" Background="WhiteSmoke" VerticalAlignment="Center" HorizontalAlignment="Right"/>
         </Grid>
 
         <!-- ジョブリスト -->
-        <TreeView Height="491" ItemsSource="{Binding Jobs}" ItemTemplate="{StaticResource JobListItemTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+        <TreeView Height="491" ItemsSource="{Binding Jobs}" ItemTemplate="{StaticResource JobListItemTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto" >
+            <TreeView.ItemContainerStyle>
+                <Style TargetType="TreeViewItem">
+                    <Setter Property="IsExpanded" Value="{Binding IsOpenTreeView, Mode=TwoWay}"/>
+                </Style>
+            </TreeView.ItemContainerStyle>
+        </TreeView>
 
         <Grid Margin="9">
             <Grid.ColumnDefinitions>

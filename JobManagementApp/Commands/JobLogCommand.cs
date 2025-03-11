@@ -191,16 +191,6 @@ namespace JobManagementApp.Commands
             }
         }
 
-        /// <summary> 
-        /// ViewModel　再作成
-        /// </summary> 
-        //public void RecreateViewModel(JobParamModel job)
-        //{
-        //    var newViewModel = new JobLogViewModel(_if, job.Scenario, job.Eda);
-        //    _vm = newViewModel;
-        //    Application.Current.jo.DataContext = newViewModel;
-        //}
-
 
 
 
@@ -317,53 +307,77 @@ namespace JobManagementApp.Commands
 
         private async void MonitorFile(JobLogItemViewModel log)
         {
-            while (true)
+            try
             {
-                var fileInfo = new FileInfo(Path.Combine(log.FilePath, log.DisplayFileName));
-                log.UpdateDate = fileInfo.LastWriteTime.ToString("yyyy/MM/dd HH:mm:ss");
-                log.Size = $"{(int)Math.Round(fileInfo.Length / 1024.0)} KB";
-
-                // 監視完了
-                if (log.ObserverStatus == emObserverStatus.SUCCESS) break;
-
-                // 5秒待機
-                await Task.Delay(5000);
-
-                var newFileInfo = new FileInfo(Path.Combine(log.FilePath, log.DisplayFileName));
-                if (fileInfo.LastWriteTime == newFileInfo.LastWriteTime && fileInfo.Length == newFileInfo.Length)
+                while (true)
                 {
+                    var fileInfo = new FileInfo(Path.Combine(log.FilePath, log.DisplayFileName));
+                    log.UpdateDate = fileInfo.LastWriteTime.ToString("yyyy/MM/dd HH:mm:ss");
+                    log.Size = $"{(int)Math.Round(fileInfo.Length / 1024.0)} KB";
 
-                    // コピー先フォルダパスがセットされていない場合、パス作成
-                    if (string.IsNullOrEmpty(_vm.ToCopyFolderPath))
+                    // 監視完了
+                    if (log.ObserverStatus == emObserverStatus.SUCCESS) break;
+
+                    // 3秒待機
+                    await Task.Delay(3000);
+
+                    var newFileInfo = new FileInfo(Path.Combine(log.FilePath, log.DisplayFileName));
+                    if (fileInfo.LastWriteTime == newFileInfo.LastWriteTime && fileInfo.Length == newFileInfo.Length)
                     {
-                        string ToCopyPath = Path.Combine(_vm.TempSavePath, DateTime.Now.ToString("yyyyMMdd"));
-                        _vm.ToCopyFolderPath = Path.Combine(ToCopyPath, _vm.Id);
-                    }
 
-                    // コピー先フォルダが存在しない場合、フォルダを作成する
-                    if (!Directory.Exists(_vm.ToCopyFolderPath))
-                    {
-                        Directory.CreateDirectory(_vm.ToCopyFolderPath);
-                    }
+                        // コピー先フォルダパスがセットされていない場合、パス作成
+                        if (string.IsNullOrEmpty(_vm.ToCopyFolderPath))
+                        {
+                            string ToCopyPath = Path.Combine(_vm.TempSavePath, DateTime.Now.ToString("yyyyMMdd"));
+                            _vm.ToCopyFolderPath = Path.Combine(ToCopyPath, _vm.Id);
+                        }
 
-                    // コピー元ファイル
-                    string sourceFilePath = $@"{Path.Combine(log.FilePath, log.DisplayFileName)}";
-                    string destinationFilePath = $@"{Path.Combine(_vm.ToCopyFolderPath, log.DisplayFileName)}";
+                        // コピー先フォルダが存在しない場合、フォルダを作成する
+                        if (!Directory.Exists(_vm.ToCopyFolderPath))
+                        {
+                            Directory.CreateDirectory(_vm.ToCopyFolderPath);
+                        }
+
+                        // コピー元ファイル
+                        string sourceFilePath = $@"{Path.Combine(log.FilePath, log.DisplayFileName)}";
+                        string destinationFilePath = $@"{Path.Combine(_vm.ToCopyFolderPath, log.DisplayFileName)}";
 
 
-                    if (ShouldCopyFile(sourceFilePath, destinationFilePath))
-                    {
-                        // コピー実施する場合、パーセント表示する
-                        await CopyFileWithProgress(sourceFilePath, destinationFilePath, log);
-                        File.SetLastWriteTime(destinationFilePath, File.GetLastWriteTime(sourceFilePath));
-                    }
-                    else
-                    {
-                        // 同じ場合、100% 固定
-                        log.CopyPercent = "100 %";
-                        log.ObserverStatus = emObserverStatus.SUCCESS;
+                        if (ShouldCopyFile(sourceFilePath, destinationFilePath))
+                        {
+                            // コピー実施する場合、パーセント表示する
+                            await CopyFileWithProgress(sourceFilePath, destinationFilePath, log);
+                            // ログファイル以外カウント
+                            if(log.FileType != emFileType.LOG)
+                            {
+                                await GetLineCount(destinationFilePath, log).ContinueWith(x => 
+                                {
+                                    log.LineCount = x.Result.ToString() + " 件";
+                                });
+                            }
+                            File.SetLastWriteTime(destinationFilePath, File.GetLastWriteTime(sourceFilePath));
+                        }
+                        else
+                        {
+                            // 同じ場合、100% 固定
+                            log.CopyPercent = "100 %";
+                            log.ObserverStatus = emObserverStatus.SUCCESS;
+                            // ログファイル以外カウント
+                            if(log.FileType != emFileType.LOG)
+                            {
+                                await GetLineCount(destinationFilePath, log).ContinueWith(x => 
+                                {
+                                    log.LineCount = x.Result.ToString() + " 件";
+                                });
+                            }
+                        }
                     }
                 }
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show("ファイル取得にエラーが発生したため、再実行します");
+                JobLogViewModel.RecreateViewModel(new JobParamModel{ Scenario = _vm.Scenario, Eda = _vm.Eda });
             }
         }
 
@@ -406,10 +420,13 @@ namespace JobManagementApp.Commands
                         // 100% になれば、「取得済」にする
                         if ($"{totalBytesCopied * 100 / totalBytes}" == "100")
                         {
+
+
                             log.ObserverStatus = emObserverStatus.SUCCESS;
                         }
                     }
                 }
+
             }
             finally
             {
@@ -417,6 +434,26 @@ namespace JobManagementApp.Commands
             }
         }
 
+        private async Task<int> GetLineCount(string filePath, JobLogItemViewModel log)
+        {
+            int lineCount = 0;
 
+            // 一時ファイルにコピーして行数をカウント
+            string tempFilePath = Path.GetTempFileName();
+            File.Copy(filePath, tempFilePath, true);
+
+            using (StreamReader reader = new StreamReader(tempFilePath))
+            {
+                while (await reader.ReadLineAsync() != null)
+                {
+                    lineCount++;
+                }
+            }
+
+            // 一時ファイルを削除
+            File.Delete(tempFilePath);
+
+            return lineCount;
+        }
     }
 }

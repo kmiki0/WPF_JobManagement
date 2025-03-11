@@ -19,16 +19,16 @@
         </Style>
         
         <Style x:Key="FileNameStyle" TargetType="TextBlock">
-            <Setter Property="Width" Value="365" />
+            <Setter Property="Width" Value="300" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="5, 0, 0, 0" />
             <Setter Property="FontWeight" Value="Bold" />
         </Style>
 
         <Style x:Key="FileUpdateStyle" TargetType="TextBlock">
-            <Setter Property="Width" Value="115" />
+            <Setter Property="Width" Value="111" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="10, 0, 10, 0" />
+            <Setter Property="Margin" Value="10, 0, 5, 0" />
             <Setter Property="Foreground" Value="Gray" />
         </Style>
 
@@ -36,7 +36,15 @@
             <Setter Property="Width" Value="65" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="HorizontalAlignment" Value="Right" />
-            <Setter Property="Margin" Value="10, 0, 10, 0" />
+            <Setter Property="Margin" Value="10, 0, 5, 0" />
+            <Setter Property="Foreground" Value="Gray" />
+        </Style>
+
+        <Style x:Key="FileLineCountStyle" TargetType="TextBlock">
+            <Setter Property="Width" Value="60" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="8, 0, 10, 0" />
             <Setter Property="Foreground" Value="Gray" />
         </Style>
 
@@ -83,9 +91,14 @@
                         <TextBlock Text="{Binding Path=FileType, Converter={StaticResource fileTypeToJapaneseConverter}}" HorizontalAlignment="Center" Margin="5"/>
                     </Border>
 
+                    <!-- ファイル名 -->
                     <TextBlock Text="{Binding DisplayFileName}"  Style="{StaticResource FileNameStyle}" />
+                    <!-- 更新日付 -->
                     <TextBlock Text="{Binding UpdateDate}" Style="{StaticResource FileUpdateStyle}"/>
+                    <!-- サイズ -->
                     <TextBlock Text="{Binding Size}" Style="{StaticResource FileSizeStyle}"/>
+                    <!-- 件数 -->
+                    <TextBlock Text="{Binding LineCount}" Style="{StaticResource FileLineCountStyle}"/>
                     
                     <!-- 監視ステータス -->
                     <Border>

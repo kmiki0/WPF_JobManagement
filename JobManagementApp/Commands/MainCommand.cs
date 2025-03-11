@@ -11,6 +11,7 @@ using System.Collections.ObjectModel;
 using JobManagementApp.Services;
 using System.Windows.Threading;
 using JobManagementApp.Manager;
+using System.Windows.Controls;
 
 namespace JobManagementApp.Commands
 {
@@ -88,8 +89,47 @@ namespace JobManagementApp.Commands
             detailWindow.ShowDialog();
         }
 
+        /// <summary> 
+        /// TreeViewの開閉チェックボックス　変更イベント
+        /// </summary> 
+        public void TreeViewCheckBox_Toggle()
+        {
+            ExpandAllItems(_vm.IsExpanded);
+        }
 
+        private void ExpandAll(TreeViewItem item, bool expand)
+        {
+            if (item == null) return;
 
+            item.IsExpanded = expand;
+            foreach (var subItem in item.Items)
+            {
+                if (subItem is TreeViewItem treeViewItem)
+                {
+                    ExpandAll(treeViewItem, expand);
+                }
+            }
+        }
+
+        private void ExpandAllItems(bool expand)
+        {
+            _vm.IsOpenTreeView = expand;
+            //foreach (var item in MyTreeView.Items)
+            //{
+            //    if (item is TreeViewItem treeViewItem)
+            //    {
+            //        ExpandAll(treeViewItem, expand);
+            //    }
+            //    else if (MyTreeView.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem container)
+            //    {
+            //        ExpandAll(container, expand);
+            //    }
+            //}
+        }
+
+        /// <summary> 
+        /// JOBリスト 作成
+        /// </summary> 
         private void CreateJobList()
         {
             // 受信出来次第、画面更新

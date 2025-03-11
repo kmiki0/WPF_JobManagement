@@ -43,6 +43,27 @@ namespace JobManagementApp.ViewModels
             }
         }
 
+        // TreeViewの開閉トグル
+        private bool _isOpenTreeView { get; set; }
+        public bool IsOpenTreeView {
+            get => _isOpenTreeView;
+            set
+            {
+                _isOpenTreeView = value;
+                OnPropertyChanged(nameof(IsOpenTreeView));
+            }
+        }
+        private bool _isExpanded { get; set; }
+        public bool IsExpanded {
+            get => _isExpanded;
+            set
+            {
+                _isExpanded = value;
+                OnPropertyChanged(nameof(IsExpanded));
+                _command.TreeViewCheckBox_Toggle();
+            }
+        }
+
         // ユーザーID
         private string _userId { get; set; }
         public string UserId {
