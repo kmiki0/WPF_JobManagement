@@ -346,15 +346,14 @@ namespace JobManagementApp.Commands
                         if (ShouldCopyFile(sourceFilePath, destinationFilePath))
                         {
                             // コピー実施する場合、パーセント表示する
-                            await CopyFileWithProgress(sourceFilePath, destinationFilePath, log);
-                            // ログファイル以外カウント
-                            if(log.FileType != emFileType.LOG)
-                            {
-                                await GetLineCount(destinationFilePath, log).ContinueWith(x => 
+                            await CopyFileWithProgress(sourceFilePath, destinationFilePath, log).ContinueWith(async x =>  {
+
+                                // ログファイル以外カウント
+                                if (log.FileType != emFileType.LOG)
                                 {
-                                    log.LineCount = x.Result.ToString() + " 件";
-                                });
-                            }
+                                    log.LineCount = GetLineCount(destinationFilePath, log).ToString() + " 件";
+                                }
+                            });
                             File.SetLastWriteTime(destinationFilePath, File.GetLastWriteTime(sourceFilePath));
                         }
                         else
@@ -365,10 +364,7 @@ namespace JobManagementApp.Commands
                             // ログファイル以外カウント
                             if(log.FileType != emFileType.LOG)
                             {
-                                await GetLineCount(destinationFilePath, log).ContinueWith(x => 
-                                {
-                                    log.LineCount = x.Result.ToString() + " 件";
-                                });
+                                log.LineCount = GetLineCount(destinationFilePath, log).ToString() + " 件";
                             }
                         }
                     }
@@ -376,8 +372,7 @@ namespace JobManagementApp.Commands
             }
             catch (Exception e)
             {
-                MessageBox.Show("ファイル取得にエラーが発生したため、再実行します");
-                JobLogViewModel.RecreateViewModel(new JobParamModel{ Scenario = _vm.Scenario, Eda = _vm.Eda });
+                throw;
             }
         }
 
@@ -434,7 +429,7 @@ namespace JobManagementApp.Commands
             }
         }
 
-        private async Task<int> GetLineCount(string filePath, JobLogItemViewModel log)
+        private int GetLineCount(string filePath, JobLogItemViewModel log)
         {
             int lineCount = 0;
 
@@ -442,13 +437,8 @@ namespace JobManagementApp.Commands
             string tempFilePath = Path.GetTempFileName();
             File.Copy(filePath, tempFilePath, true);
 
-            using (StreamReader reader = new StreamReader(tempFilePath))
-            {
-                while (await reader.ReadLineAsync() != null)
-                {
-                    lineCount++;
-                }
-            }
+            // 行数をカウント
+            lineCount = File.ReadLines(tempFilePath).Count();
 
             // 一時ファイルを削除
             File.Delete(tempFilePath);
