@@ -18,7 +18,6 @@ namespace JobManagementApp.Manager
         public DICSSLORA.ACmnLog.clsMngLogFile pobjErrLog; // エラーログ
         
         //public DICSSLORA.ACmnOra.clsMngOracle pobjOraDb; // データベース
-        public string pstrCurDir;    // カレントディレクトリ
 
         private static DatabaseManager _instance;
 
@@ -29,25 +28,13 @@ namespace JobManagementApp.Manager
         private DatabaseManager()
         {
             var pobjIniFile = new clsMngIniFile(clsDefineCnst.pcnstININAME);
-
             // 読み込みエラー
             pobjIniFile.pGetInfo();
 
-
-            //カレントディレクトリ(プロジェクトのディレクトリ) 取得
-            pstrCurDir = AppDomain.CurrentDomain.BaseDirectory;
-
-            var normalPath = Path.Combine(pstrCurDir, "nomal.log");
-            var errPath = Path.Combine(pstrCurDir, "error.log");
-            // ファイルが存在しない場合、新規作成
-            if (!File.Exists(normalPath)) using (File.Create(normalPath)) { }
-            if (!File.Exists(errPath)) using (File.Create(errPath)) { }
-
             // 操作ログインスタンス生成 
-            pobjActLog = new clsMngLogFile(normalPath, pobjIniFile.pGetItemInt("NORMAL_LOG", "LOG_LEVEL"));
+            pobjActLog = LogFile.Instance;
             // エラーログインスタンス生成
-            pobjErrLog = new clsMngLogFile(errPath, pobjIniFile.pGetItemInt("ERROR_LOG", "LOG_LEVEL"));
-
+            pobjErrLog = ErrLogFile.Instance;
 
             // ORACLEインスタンス生成 
             pobjOraDb = new DICSSLORA.ACmnOra.clsMngOracle(

@@ -1,20 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using DICSSLORA.ACmnFunc;
+using DICSSLORA.ACmnIni;
+using DICSSLORA.ACmnLog;
+using DICSSLORA.ACmnOra;
 
 namespace JobManagementApp.Manager
 {
     public class LogFile
     {
-        private static LogFile _instance;
+        private static clsMngLogFile _instance;
         private static readonly object _lock = new object();
 
-        // プライベートコンストラクタ
-        private LogFile() { }
-
-        public static LogFile Instance
+        public static clsMngLogFile Instance
         {
             get
             {
@@ -22,29 +24,27 @@ namespace JobManagementApp.Manager
                 {
                     if (_instance == null)
                     {
-                        _instance = new LogFile();
+                        var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "nomal.log");
+                        if (!File.Exists(logPath)) using (File.Create(logPath)) { }
+                        _instance = new clsMngLogFile(logPath, 5);;
                     }
                     return _instance;
                 }
             }
         }
 
-        public void WriteLog(string message)
+        public static void WriteLog(string message)
         {
-            // ログ書き込み処理
-            Console.WriteLine($"Log: {message}");
+            Instance.pWriteLog( clsMngLogFile.peLogLevel.Level3, "JobApp", "JobApp", "clsMngOracle", message );
         }
     }
 
-    public class ErrorLogFile
+    public class ErrLogFile
     {
-        private static ErrorLogFile _instance;
+        private static clsMngLogFile _instance;
         private static readonly object _lock = new object();
 
-        // プライベートコンストラクタ
-        private ErrorLogFile() { }
-
-        public static ErrorLogFile Instance
+        public static clsMngLogFile Instance
         {
             get
             {
@@ -52,35 +52,19 @@ namespace JobManagementApp.Manager
                 {
                     if (_instance == null)
                     {
-                        _instance = new ErrorLogFile();
+                        var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "error.log");
+                        if (!File.Exists(logPath)) using (File.Create(logPath)) { }
+                        _instance = new clsMngLogFile(logPath, 5);;
                     }
                     return _instance;
                 }
             }
         }
 
-        public void WriteErrorLog(string message)
+        public static void WriteLog(string message)
         {
-            // エラーログ書き込み処理
-            Console.WriteLine($"Error Log: {message}");
+            Instance.pWriteLog( clsMngLogFile.peLogLevel.Level3, "JobApp", "Error", "clsMngOracle", message );
         }
     }
-}
 
-namespace SingletonExample
-{
-
-    class Program
-    {
-        static void Main(string[] args)
-        {
-            // ログファイル用インスタンスの取得と使用
-            LogFile logFile = LogFile.Instance;
-            logFile.WriteLog("This is a log message.");
-
-            // エラーログファイル用インスタンスの取得と使用
-            ErrorLogFile errorLogFile = ErrorLogFile.Instance;
-            errorLogFile.WriteErrorLog("This is an error log message.");
-        }
-    }
 }

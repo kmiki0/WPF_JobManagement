@@ -101,6 +101,7 @@
     <Compile Include="Helpers\TupleConverter.cs" />
     <Compile Include="Helpers\WindowHelper.cs" />
     <Compile Include="Manager\DatabaseManager.cs" />
+    <Compile Include="Manager\LogFileManager.cs" />
     <Compile Include="Manager\UserFileManager.cs" />
     <Compile Include="Models\JobLogDetailModel.cs" />
     <Compile Include="Models\JobLogModel.cs" />

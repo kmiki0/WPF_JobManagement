@@ -36,13 +36,15 @@ namespace JobManagementApp
                 // ORACLEセッションの確立
                 if (pobjOraDb.pInitOra() == false) 
                 {
-                    throw new Exception("ORACLE 初期化エラー");
+                    ErrLogFile.WriteLog("ORACLE 初期化エラー");
+                    throw new Exception();
                 }
 
                 // DBオープン
                 if (pobjOraDb.pOpenOra() == false)
                 {
-                    throw new Exception("ORACLE オープンエラー");
+                    ErrLogFile.WriteLog("ORACLE オープンエラー");
+                    throw new Exception();
                 }
 
                 // オープンクローズを制御する
