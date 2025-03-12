@@ -83,6 +83,17 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(UpdateDate));
             }
         }
+        // TreeViewが開いているか
+        private bool _isOpenTreeView { get; set; }
+        public bool IsOpenTreeView {
+            get => _isOpenTreeView;
+            set
+            {
+                _isOpenTreeView = value;
+                OnPropertyChanged(nameof(IsOpenTreeView));
+            }
+        }
+
         // シナリオグループ（これで、TreeView上のシナリオのボタンやテキストを非表示にする）
         public bool IsScenarioGroup { get; set; }
         // 入れ子リスト
@@ -101,6 +112,7 @@ namespace JobManagementApp.ViewModels
         public JobListItemViewModel()
         {
             // 初期値 セット
+            IsOpenTreeView = false;
             IsScenarioGroup = false;
             UpdateDate = "";
             Children = new ObservableCollection<JobListItemViewModel>();

@@ -89,33 +89,31 @@ namespace JobManagementApp.Commands
             detailWindow.ShowDialog();
         }
 
-        private void ExpandAll(TreeViewItem item, bool expand)
+        /// <summary> 
+        /// TreeViewの開閉チェックボックス　変更イベント
+        /// </summary> 
+        public void TreeViewCheckBox_Toggle()
         {
-            if (item == null) return;
-
-            item.IsExpanded = expand;
-            foreach (var subItem in item.Items)
+            foreach (var job in _vm.Jobs)
             {
-                if (subItem is TreeViewItem treeViewItem)
+                job.IsOpenTreeView = _vm.IsExpanded;
+                if (job.Children.Count > 0)
                 {
-                    ExpandAll(treeViewItem, expand);
+                    TreeViewAllChange(job.Children);
                 }
             }
         }
-
-        private void ExpandAllItems(bool expand)
+        // 再帰的に検索
+        private void TreeViewAllChange(ObservableCollection<JobListItemViewModel> jobs)
         {
-            //foreach (var item in MyTreeView.Items)
-            //{
-            //    if (item is TreeViewItem treeViewItem)
-            //    {
-            //        ExpandAll(treeViewItem, expand);
-            //    }
-            //    else if (MyTreeView.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem container)
-            //    {
-            //        ExpandAll(container, expand);
-            //    }
-            //}
+            foreach (var job in jobs)
+            {
+                job.IsOpenTreeView = _vm.IsExpanded;
+                if (job.Children.Count > 0)
+                {
+                    TreeViewAllChange(job.Children);
+                }
+            }
         }
 
         /// <summary> 

@@ -41,6 +41,7 @@ namespace JobManagementApp.ViewModels
             {
                 _isExpanded = value;
                 OnPropertyChanged(nameof(IsExpanded));
+                _command.TreeViewCheckBox_Toggle();
             }
         }
         // ユーザーID

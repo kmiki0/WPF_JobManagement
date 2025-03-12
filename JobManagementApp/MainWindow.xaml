@@ -44,12 +44,7 @@
         <TreeView Height="491" ItemsSource="{Binding Jobs}" ScrollViewer.VerticalScrollBarVisibility="Auto" >
             <TreeView.ItemContainerStyle>
                 <Style TargetType="TreeViewItem">
-                    <Setter Property="IsExpanded">
-                        <Setter.Value>
-                            <!-- そのまま IsExpanded で指定すると JobListItemViewModel からプロパティを探すので、明示的に指定 -->
-                            <Binding Path="DataContext.IsExpanded" Mode="TwoWay" RelativeSource="{RelativeSource AncestorType={x:Type Window}}" />
-                        </Setter.Value>
-                    </Setter>
+                    <Setter Property="IsExpanded" Value="{Binding IsOpenTreeView, Mode=TwoWay}" />
                 </Style>
             </TreeView.ItemContainerStyle>
             <TreeView.ItemTemplate>
