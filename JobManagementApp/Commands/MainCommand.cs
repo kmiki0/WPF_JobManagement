@@ -89,14 +89,6 @@ namespace JobManagementApp.Commands
             detailWindow.ShowDialog();
         }
 
-        /// <summary> 
-        /// TreeViewの開閉チェックボックス　変更イベント
-        /// </summary> 
-        public void TreeViewCheckBox_Toggle()
-        {
-            ExpandAllItems(_vm.IsExpanded);
-        }
-
         private void ExpandAll(TreeViewItem item, bool expand)
         {
             if (item == null) return;
@@ -113,7 +105,6 @@ namespace JobManagementApp.Commands
 
         private void ExpandAllItems(bool expand)
         {
-            _vm.IsOpenTreeView = expand;
             //foreach (var item in MyTreeView.Items)
             //{
             //    if (item is TreeViewItem treeViewItem)

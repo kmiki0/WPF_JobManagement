@@ -1,20 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Data;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.ComponentModel;
+using System.Windows.Input;
 using System.Collections.ObjectModel;
 using JobManagementApp.Models;
-using JobManagementApp.Services;
-using System.Data;
-using System.ComponentModel;
-using System.Windows.Data;
-using JobManagementApp.Helpers;
-using System.Windows.Threading;
-using System.Windows.Input;
-using JobManagementApp.Manager;
-using System.Windows;
 using JobManagementApp.Commands;
+using JobManagementApp.Helpers;
 
 namespace JobManagementApp.ViewModels
 {
@@ -42,17 +33,7 @@ namespace JobManagementApp.ViewModels
                 }
             }
         }
-
         // TreeViewの開閉トグル
-        private bool _isOpenTreeView { get; set; }
-        public bool IsOpenTreeView {
-            get => _isOpenTreeView;
-            set
-            {
-                _isOpenTreeView = value;
-                OnPropertyChanged(nameof(IsOpenTreeView));
-            }
-        }
         private bool _isExpanded { get; set; }
         public bool IsExpanded {
             get => _isExpanded;
@@ -60,10 +41,8 @@ namespace JobManagementApp.ViewModels
             {
                 _isExpanded = value;
                 OnPropertyChanged(nameof(IsExpanded));
-                _command.TreeViewCheckBox_Toggle();
             }
         }
-
         // ユーザーID
         private string _userId { get; set; }
         public string UserId {
@@ -74,7 +53,6 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(UserId));
             }
         }
-        
         // 運用処理管理R　取得時刻
         private string _displayUpdateDate { get; set; }
         public string DisplayUpdateDate {
@@ -85,7 +63,6 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(DisplayUpdateDate));
             }
         }
-
         // ジョブリスト
         private ObservableCollection<JobListItemViewModel> _jobs { get; set; }
         public ObservableCollection<JobListItemViewModel> Jobs {

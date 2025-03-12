@@ -9,126 +9,6 @@
         <local:StatusToJapaneseConverter x:Key="statusToJapaneseConverter"/>
         <local:TupleConverter x:Key="TupleConverter" />
 
-        <HierarchicalDataTemplate x:Key="JobListItemTemplate" ItemsSource="{Binding Children}">
-
-            <Border Background="WhiteSmoke" Margin="0, 5, 0, 5" BorderThickness="1" CornerRadius="3">
-
-                <StackPanel Orientation="Horizontal">
-                    <!-- 実行ボタン -->
-                    <Button Command="{Binding RunCommand}" Style="{StaticResource RunStyleButton}" Width="18"  Height="18" Margin="4" >
-                        <Button.CommandParameter>
-                            <MultiBinding Converter="{StaticResource TupleConverter}">
-                                <Binding Path="Scenario" />
-                                <Binding Path="Eda" />
-                            </MultiBinding>
-                        </Button.CommandParameter>
-                        <Image>
-                            <Image.Style>
-                                <Style TargetType="Image">
-                                    <Setter Property="Source" Value="Resources/play.png" />
-                                    <Style.Triggers>
-
-                                        <!-- 実行しないパターン 実行可否, シナリオグループではない -->
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding IsScenarioGroup}" Value="False"/>
-                                                <Condition Binding="{Binding JobBoolean}" Value="False"/>
-                                            </MultiDataTrigger.Conditions>
-                                                <Setter Property="Opacity" Value="0.3"/>
-                                        </MultiDataTrigger>
-
-                                        <!-- 実行しないパターン 自動起動 -->
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding Execution}" Value="0"/>
-                                            </MultiDataTrigger.Conditions>
-                                                <Setter Property="Opacity" Value="0.3"/>
-                                        </MultiDataTrigger>
-
-                                        <!-- シナリオグループの場合 -->
-                                        <DataTrigger Binding="{Binding IsScenarioGroup}" Value="True">
-                                            <Setter Property="Source" Value="Resources/solid.png" />
-                                            <Setter Property="Opacity" Value="1"/>
-                                        </DataTrigger>
-
-                                    </Style.Triggers>
-                                </Style>
-                            </Image.Style>
-                        </Image>
-                    </Button>
-
-                    <!-- ジョブID -->
-                    <TextBlock Text="{Binding Id}" Margin="0, 0, 10, 0" VerticalAlignment="Center" Foreground="Black"/>
-
-                    <!-- ジョブ名 -->
-                    <TextBlock Text="{Binding Name}" Margin="0, 0, 10, 0" VerticalAlignment="Center" Foreground="Black"/>
-
-                    <!-- ステータス -->
-                    <Border >
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="BorderThickness" Value="2" />
-                                <Setter Property="CornerRadius" Value="5" />
-                                <Setter Property="Width" Value="60" />
-                               <Style.Triggers>
-                                    <!-- 待機中 -->
-                                    <DataTrigger Binding="{Binding Status}" Value="0">
-                                        <Setter Property="Background" Value="Gainsboro"/>
-                                    </DataTrigger>
-                                    <!-- 実行中 -->
-                                    <DataTrigger Binding="{Binding Status}" Value="1">
-                                        <Setter Property="Background" Value="LightCyan"/>
-                                    </DataTrigger>
-                                    <!-- 正常終了 -->
-                                    <DataTrigger Binding="{Binding Status}" Value="2">
-                                        <Setter Property="Background" Value="PaleGreen"/>
-                                    </DataTrigger>
-                                    <!-- 異常終了 -->
-                                    <DataTrigger Binding="{Binding Status}" Value="3">
-                                        <Setter Property="Background" Value="Salmon"/>
-                                    </DataTrigger>
-
-                                    <!-- シナリオグループの場合 -->
-                                    <DataTrigger Binding="{Binding IsScenarioGroup}" Value="True">
-                                        <Setter Property="Width" Value="0" />
-                                    </DataTrigger>
-                                </Style.Triggers> 
-                            </Style>
-                        </Border.Style>
-                        <TextBlock Text="{Binding Path=Status, Converter={StaticResource statusToJapaneseConverter}}" Style="{StaticResource TriggerVisibleText}" HorizontalAlignment="Center" VerticalAlignment="Center"  Foreground="Black"/>
-                    </Border>
-
-                    <!-- 詳細ボタン -->
-                    <Button Command="{Binding DetailCommand}" Style="{StaticResource NoStyleButtonAndTriggerVisible}" Width="18"  Height="18" Margin="4" >
-                        <Button.CommandParameter>
-                            <MultiBinding Converter="{StaticResource TupleConverter}">
-                                <Binding Path="Scenario" />
-                                <Binding Path="Eda" />
-                            </MultiBinding>
-                        </Button.CommandParameter>
-                        <Image Source="Resources/setting.png"/>
-                    </Button>
-
-                    <!-- ログボタン -->
-                    <Button Command="{Binding LogCommand}" Style="{StaticResource NoStyleButtonAndTriggerVisible}" Width="18"  Height="18" Margin="4" >
-                        <Button.CommandParameter>
-                            <MultiBinding Converter="{StaticResource TupleConverter}">
-                                <Binding Path="Scenario" />
-                                <Binding Path="Eda" />
-                            </MultiBinding>
-                        </Button.CommandParameter>
-                        <Image Source="Resources/paper.png"/>
-                    </Button>
-
-                    <!-- 更新日付 -->
-                    <TextBlock Text="{Binding UpdateDate}" Margin="0, 0, 10, 0" VerticalAlignment="Center" Foreground="Black"/>
-                </StackPanel>
-
-                <Border.Effect> 
-                    <DropShadowEffect BlurRadius="2" ShadowDepth="1" Color="DarkGray"/> 
-                </Border.Effect>
-            </Border>
-        </HierarchicalDataTemplate>
     </Window.Resources>
 
     <!-- 画面レイアウト -->
@@ -154,19 +34,146 @@
                 </Button>
             </Border>
             <!-- ツリー全て開く・閉じる -->
-            <!--<CheckBox Grid.Column="3" VerticalAlignment="Center" IsChecked="{Binding IsExpanded, Mode=TwoWay}">ツリー表示切替</CheckBox>-->
+            <CheckBox Grid.Column="3" VerticalAlignment="Center" IsChecked="{Binding IsExpanded, Mode=TwoWay}">ツリー すべて開く</CheckBox>
 
             <Label Grid.Column="5" HorizontalAlignment="Right">更新日時</Label>
             <TextBlock Grid.Column="6" Text="{Binding DisplayUpdateDate}" Margin="0, 0, 10, 0" Background="WhiteSmoke" VerticalAlignment="Center" HorizontalAlignment="Right"/>
         </Grid>
 
         <!-- ジョブリスト -->
-        <TreeView Height="491" ItemsSource="{Binding Jobs}" ItemTemplate="{StaticResource JobListItemTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto" >
+        <TreeView Height="491" ItemsSource="{Binding Jobs}" ScrollViewer.VerticalScrollBarVisibility="Auto" >
             <TreeView.ItemContainerStyle>
                 <Style TargetType="TreeViewItem">
-                    <Setter Property="IsExpanded" Value="{Binding IsOpenTreeView, Mode=TwoWay}"/>
+                    <Setter Property="IsExpanded">
+                        <Setter.Value>
+                            <!-- そのまま IsExpanded で指定すると JobListItemViewModel からプロパティを探すので、明示的に指定 -->
+                            <Binding Path="DataContext.IsExpanded" Mode="TwoWay" RelativeSource="{RelativeSource AncestorType={x:Type Window}}" />
+                        </Setter.Value>
+                    </Setter>
                 </Style>
             </TreeView.ItemContainerStyle>
+            <TreeView.ItemTemplate>
+                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+
+                    <Border Background="WhiteSmoke" Margin="0, 5, 0, 5" BorderThickness="1" CornerRadius="3">
+
+                        <StackPanel Orientation="Horizontal">
+                            <!-- 実行ボタン -->
+                            <Button Command="{Binding RunCommand}" Style="{StaticResource RunStyleButton}" Width="18"  Height="18" Margin="4" >
+                                <Button.CommandParameter>
+                                    <MultiBinding Converter="{StaticResource TupleConverter}">
+                                        <Binding Path="Scenario" />
+                                        <Binding Path="Eda" />
+                                    </MultiBinding>
+                                </Button.CommandParameter>
+                                <Image>
+                                    <Image.Style>
+                                        <Style TargetType="Image">
+                                            <Setter Property="Source" Value="Resources/play.png" />
+                                            <Style.Triggers>
+
+                                                <!-- 実行しないパターン 実行可否, シナリオグループではない -->
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsScenarioGroup}" Value="False"/>
+                                                        <Condition Binding="{Binding JobBoolean}" Value="False"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Opacity" Value="0.3"/>
+                                                </MultiDataTrigger>
+
+                                                <!-- 実行しないパターン 自動起動 -->
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding Execution}" Value="0"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Opacity" Value="0.3"/>
+                                                </MultiDataTrigger>
+
+                                                <!-- シナリオグループの場合 -->
+                                                <DataTrigger Binding="{Binding IsScenarioGroup}" Value="True">
+                                                    <Setter Property="Source" Value="Resources/solid.png" />
+                                                    <Setter Property="Opacity" Value="1"/>
+                                                </DataTrigger>
+
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Image.Style>
+                                </Image>
+                            </Button>
+
+                            <!-- ジョブID -->
+                            <TextBlock Text="{Binding Id}" Margin="0, 0, 10, 0" VerticalAlignment="Center" Foreground="Black"/>
+
+                            <!-- ジョブ名 -->
+                            <TextBlock Text="{Binding Name}" Margin="0, 0, 10, 0" VerticalAlignment="Center" Foreground="Black"/>
+
+                            <!-- ステータス -->
+                            <Border >
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderThickness" Value="2" />
+                                        <Setter Property="CornerRadius" Value="5" />
+                                        <Setter Property="Width" Value="60" />
+                                       <Style.Triggers>
+                                            <!-- 待機中 -->
+                                            <DataTrigger Binding="{Binding Status}" Value="0">
+                                                <Setter Property="Background" Value="Gainsboro"/>
+                                            </DataTrigger>
+                                            <!-- 実行中 -->
+                                            <DataTrigger Binding="{Binding Status}" Value="1">
+                                                <Setter Property="Background" Value="LightCyan"/>
+                                            </DataTrigger>
+                                            <!-- 正常終了 -->
+                                            <DataTrigger Binding="{Binding Status}" Value="2">
+                                                <Setter Property="Background" Value="PaleGreen"/>
+                                            </DataTrigger>
+                                            <!-- 異常終了 -->
+                                            <DataTrigger Binding="{Binding Status}" Value="3">
+                                                <Setter Property="Background" Value="Salmon"/>
+                                            </DataTrigger>
+
+                                            <!-- シナリオグループの場合 -->
+                                            <DataTrigger Binding="{Binding IsScenarioGroup}" Value="True">
+                                                <Setter Property="Width" Value="0" />
+                                            </DataTrigger>
+                                        </Style.Triggers> 
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding Path=Status, Converter={StaticResource statusToJapaneseConverter}}" Style="{StaticResource TriggerVisibleText}" HorizontalAlignment="Center" VerticalAlignment="Center"  Foreground="Black"/>
+                            </Border>
+
+                            <!-- 詳細ボタン -->
+                            <Button Command="{Binding DetailCommand}" Style="{StaticResource NoStyleButtonAndTriggerVisible}" Width="18"  Height="18" Margin="4" >
+                                <Button.CommandParameter>
+                                    <MultiBinding Converter="{StaticResource TupleConverter}">
+                                        <Binding Path="Scenario" />
+                                        <Binding Path="Eda" />
+                                    </MultiBinding>
+                                </Button.CommandParameter>
+                                <Image Source="Resources/setting.png"/>
+                            </Button>
+
+                            <!-- ログボタン -->
+                            <Button Command="{Binding LogCommand}" Style="{StaticResource NoStyleButtonAndTriggerVisible}" Width="18"  Height="18" Margin="4" >
+                                <Button.CommandParameter>
+                                    <MultiBinding Converter="{StaticResource TupleConverter}">
+                                        <Binding Path="Scenario" />
+                                        <Binding Path="Eda" />
+                                    </MultiBinding>
+                                </Button.CommandParameter>
+                                <Image Source="Resources/paper.png"/>
+                            </Button>
+
+                            <!-- 更新日付 -->
+                            <TextBlock Text="{Binding UpdateDate}" Margin="0, 0, 10, 0" VerticalAlignment="Center" Foreground="Black"/>
+                        </StackPanel>
+
+                        <Border.Effect> 
+                            <DropShadowEffect BlurRadius="2" ShadowDepth="1" Color="DarkGray"/> 
+                        </Border.Effect>
+                    </Border>
+                </HierarchicalDataTemplate>
+            </TreeView.ItemTemplate>
         </TreeView>
 
         <Grid Margin="9">
