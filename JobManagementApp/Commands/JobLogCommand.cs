@@ -402,7 +402,7 @@ namespace JobManagementApp.Commands
 
             try
             {
-                using (FileStream sourceStream = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (FileStream sourceStream = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 using (FileStream destinationStream = new FileStream(destinationFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
                     int bytesRead;
@@ -415,8 +415,6 @@ namespace JobManagementApp.Commands
                         // 100% になれば、「取得済」にする
                         if ($"{totalBytesCopied * 100 / totalBytes}" == "100")
                         {
-
-
                             log.ObserverStatus = emObserverStatus.SUCCESS;
                         }
                     }

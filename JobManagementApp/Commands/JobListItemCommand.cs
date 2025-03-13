@@ -39,6 +39,7 @@ namespace JobManagementApp.Commands
             if (result == DialogResult.Yes)
             {
                 JobService.UpdateUnyoCtrl(arg.scenario, arg.eda);
+                _vm.Status = emStatus.RUN;
             }
         }
 
@@ -56,7 +57,7 @@ namespace JobManagementApp.Commands
             WindowHelper.SetWindowLocation(ref window);
             vm.window = detailWindow;
             detailWindow.DataContext = vm;
-            detailWindow.ShowDialog();
+            detailWindow.Show();
         }
 
         /// <summary> 
@@ -82,7 +83,7 @@ namespace JobManagementApp.Commands
             logWindow.Closed += LogWindow_Closed;
             vm.window = logWindow;
             logWindow.DataContext = vm;
-            logWindow.ShowDialog();
+            logWindow.Show();
         }
 
         /// <summary> 
