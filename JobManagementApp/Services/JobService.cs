@@ -20,6 +20,9 @@ namespace JobManagementApp.Services
             DataTable dt = new DataTable();
             StringBuilder sql = new StringBuilder();
 
+            // 検索項目　ない場合、空を返す
+            if (args.Count <= 0) return new DataTable();
+
             try
             {
                 // SQL作成
@@ -77,7 +80,6 @@ namespace JobManagementApp.Services
             }
             catch (Exception e)
             {
-
                 throw new Exception(e.Message);
             }
 
@@ -291,6 +293,42 @@ namespace JobManagementApp.Services
 
         }
 
+        /// <summary> 
+        /// 受信先と送信先の一意のリストを取得
+        /// </summary> 
+        public static DataTable GetDistinctForRecvSend()
+        {
+            DataTable dt = new DataTable();
+            StringBuilder sql = new StringBuilder();
+
+            try
+            {
+                // SQL作成
+                sql.Append("select distinct ");
+                sql.Append("    'RECV' AS Type ");
+                sql.Append("   , RECEIVE AS VAL ");
+                sql.Append("from JOB_MANEGMENT ");
+                sql.Append("union ");
+                sql.Append("select distinct ");
+                sql.Append("    'SEND' AS Type ");
+                sql.Append("   , SEND AS VAL ");
+                sql.Append("from JOB_MANEGMENT ");
+
+                // SQL取得
+                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
+                if (pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                {
+                    throw new Exception("ORACLE データ取得エラー");
+                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception(e.Message);
+            }
+
+            return dt;
+        }
+
         #endregion
 
 
@@ -449,7 +487,10 @@ namespace JobManagementApp.Services
         #endregion
 
 
-        #region MAIN画面読み込み
+        #region Main画面読み込み
+        /// <summary> 
+        /// Main画面 初期ロード時
+        /// </summary> 
         public static DataTable LoadJobs(string userId)
         {
             // とりあえず全件
@@ -488,6 +529,101 @@ namespace JobManagementApp.Services
                 {
                     sql.Append($"  and JOB_O.USERID = '{userId}'");
                 }
+                sql.Append("order by");
+                sql.Append("  JOB_M.SCENARIO,");
+                sql.Append("  JOB_M.EDA");
+
+                // SQL取得
+                if (DatabaseManager.Instance.pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                {
+                    throw new Exception("ORACLE データ取得エラー");
+                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception(e.Message);
+            }
+
+            return dt;
+        }
+
+        /// <summary> 
+        /// Main画面 検索条件付き
+        /// </summary> 
+        public static DataTable GetSearchJobList(string scenario, string jobId, string recv, string send)
+        {
+
+            DataTable dt = new DataTable();
+            StringBuilder sql = new StringBuilder();
+
+            try
+            {
+                // SQL作成
+                sql.Append("select");
+                sql.Append("  JOB_M.SCENARIO as SCENARIO,");
+                sql.Append("  JOB_M.EDA as EDA,");
+                sql.Append("  JOB_M.ID as ID,");
+                sql.Append("  JOB_M.NAME as NAME,");
+                sql.Append("  JOB_M.EXECUTION as EXECUTION,");
+                sql.Append("  JOB_M.EXECCOMMNAD as EXECCOMMNAD,");
+                sql.Append("  JOB_M.STATUS as STATUS,");
+                sql.Append("  JOB_M.BEFOREJOB as BEFOREJOB,");
+                sql.Append("  JOB_M.JOBBOOLEAN as JOBBOOLEAN,");
+                sql.Append("  JOB_M.RECEIVE as RECEIVE,");
+                sql.Append("  JOB_M.SEND as SEND,");
+                sql.Append("  JOB_M.MEMO as MEMO ");
+                sql.Append("from ");
+                sql.Append("  JOB_MANEGMENT JOB_M ");
+                sql.Append("left join ");
+                sql.Append("  JOB_OWENREUSER JOB_O ");
+                sql.Append("  on JOB_M.SCENARIO = JOB_O.SCENARIO ");
+                sql.Append("  and JOB_M.EDA = JOB_O.EDA ");
+                sql.Append("where");
+                sql.Append("  JOB_M.RRSJFLG = 0 ");
+
+                // 条件　シナリオ (複数検索)
+                if (!string.IsNullOrEmpty(scenario))
+                {
+                    string[] scenarios = scenario.Split(',');
+
+                    sql.Append($"  and JOB_M.SCENARIO in (");
+                    // 「,」で複数件対応
+                    for (int i = 0; i < scenarios.Count(); i++)
+                    {
+                        // 2回目以降、カンマ付与
+                        if (i > 0) sql.Append($" ,");
+                        sql.Append($"'{scenarios[i].Trim()}'");
+                    }
+                    sql.Append($") ");
+                }
+
+                // 条件　ジョブID (複数検索)
+                if (!string.IsNullOrEmpty(jobId))
+                {
+                    string[] jobIds = jobId.Split(',');
+
+                    sql.Append($"  and JOB_M.ID in (");
+                    // 「,」で複数件対応
+                    for (int i = 0; i < jobIds.Count(); i++)
+                    {
+                        // 2回目以降、カンマ付与
+                        if (i > 0) sql.Append($" ,");
+                        sql.Append($"'{jobIds[i].Trim()}'");
+                    }
+                    sql.Append($") ");
+                }
+
+                // 条件　受信先
+                if (!string.IsNullOrEmpty(recv))
+                {
+                    sql.Append($"  and JOB_M.RECEIVE = '{recv}'");
+                }
+                // 条件　送信先
+                if (!string.IsNullOrEmpty(send))
+                {
+                    sql.Append($"  and JOB_M.SEND = '{send}'");
+                }
+
                 sql.Append("order by");
                 sql.Append("  JOB_M.SCENARIO,");
                 sql.Append("  JOB_M.EDA");

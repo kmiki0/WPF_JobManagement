@@ -13,7 +13,6 @@ namespace JobManagementApp.Models
 {
     public interface IJobLogModel
     {
-
         // ユーザー保存
         bool SaveCachePath(string path);
         // ジョブ管理テーブル 取得

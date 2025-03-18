@@ -48,7 +48,61 @@ namespace JobManagementApp.Commands
             // 定期処理 開始
             StartRegularTime();
 
+            // 検索条件のコンボボックス 読み込み
+            SetComboBox();
         }
+
+        /// <summary> 
+        /// 検索欄　開閉イベント
+        /// </summary> 
+        public void SearchAreaVisibility_Toggle(object arg)
+        {
+            bool isOpen = arg.ToString() == "1" ? true : false;
+            _vm.BorderHeight = isOpen  ? 45 : 0;
+        }
+
+        /// <summary> 
+        /// 検索ボタン　押下イベント
+        /// </summary> 
+        public void SearchButton_Click(object _)
+        {
+            // TreeView状態　初期化
+            _vm.IsExpanded = false;
+
+            _if.GetSearchJobList(_vm.Scenario, _vm.JobId, _vm.SelectedRecv, _vm.SelectedSend).ContinueWith(x =>
+            {
+                // データが取得出来ない場合
+                if (x.Result.Count <= 0) 
+                {
+                    MessageBox.Show("検索条件に合う ジョブが見つかりませんでした。", 
+                        "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                }
+                else
+                {
+                    // シナリオごとにグルーピング
+                    var groupingList = x.Result.GroupBy(y => y.Scenario);
+                    var allList = new List<JobListItemViewModel>();
+                    foreach (var group in groupingList)
+                    {
+                        allList.Add(new JobListItemViewModel
+                        {
+                            IsScenarioGroup = true,
+                            Scenario = "",
+                            Eda = "",
+                            Id = group.Key,
+                            Name = ConvertScenarioJapanese(group.Key),
+                            Children = new ObservableCollection<JobListItemViewModel>(group.ToList())
+                        });
+                    }
+
+                    _vm.Jobs = new ObservableCollection<JobListItemViewModel>(allList);
+
+                    // 運用処理管理Rの検索
+                    GetUnyoCtlData();
+                }
+            });
+        }
+        
 
         /// <summary> 
         /// ユーザー保存　押下イベント
@@ -71,6 +125,8 @@ namespace JobManagementApp.Commands
         public void RefreshButton_Click(object _)
         {
             CreateJobList();
+            // 項目初期化
+            _vm.IsExpanded = false;
         }
 
         /// <summary> 
@@ -150,6 +206,25 @@ namespace JobManagementApp.Commands
             });
         }
 
+        /// <summary> 
+        /// 検索条件のコンボボックス取得
+        /// </summary> 
+        private void SetComboBox()
+        {
+            _if.GetRecvSend().ContinueWith(x => 
+            {
+                // 受信先 データあれば、セット
+                if (x.Result.Item1.Count > 0)
+                {
+                    _vm.cmdRecv = x.Result.Item1.ToArray();
+                }
+                // 送信先 データあれば、セット
+                if (x.Result.Item2.Count > 0)
+                {
+                    _vm.cmdSend = x.Result.Item2.ToArray();
+                }
+            });
+        }
 
         /// <summary> 
         /// 定期実行 タイマー 開始

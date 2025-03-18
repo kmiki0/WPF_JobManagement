@@ -172,7 +172,6 @@ namespace JobManagementApp.ViewModels
             }
         }
 
-
         /// <summary>
         /// Init（新規）
         /// </summary>

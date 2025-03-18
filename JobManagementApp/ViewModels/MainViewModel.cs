@@ -6,6 +6,9 @@ using System.Collections.ObjectModel;
 using JobManagementApp.Models;
 using JobManagementApp.Commands;
 using JobManagementApp.Helpers;
+using System.Windows.Media.Animation;
+using System.Threading.Tasks;
+using System;
 
 namespace JobManagementApp.ViewModels
 {
@@ -33,6 +36,72 @@ namespace JobManagementApp.ViewModels
                 }
             }
         }
+
+        // [検索] シナリオ
+        public string _scenario { get; set; }
+        public string Scenario
+        {
+            get { return _scenario; }
+            set
+            {
+                _scenario = value;
+                OnPropertyChanged(nameof(Scenario));
+            }
+        }
+        // [検索] ジョブID
+        public string _jobId { get; set; }
+        public string JobId
+        {
+            get { return _jobId; }
+            set
+            {
+                _jobId = value;
+                OnPropertyChanged(nameof(JobId));
+            }
+        }
+        // [検索] 受信元 (取得した一意のリスト)
+        private Array _cmdRecv { get; set; }
+        public Array cmdRecv
+        {
+            get { return _cmdRecv; }
+            set
+            {
+                _cmdRecv = value;
+                OnPropertyChanged(nameof(cmdRecv));
+            }
+        }
+        private string _selectedRecv;
+        public string SelectedRecv
+        {
+            get { return _selectedRecv; }
+            set
+            {
+                _selectedRecv = value;
+                OnPropertyChanged(nameof(SelectedRecv));
+            }
+        }
+        // [検索] 送信元 (取得した一意のリスト)
+        private Array _cmdSend { get; set; }
+        public Array cmdSend
+        {
+            get { return _cmdSend; }
+            set
+            {
+                _cmdSend = value;
+                OnPropertyChanged(nameof(cmdSend));
+            }
+        }
+        private string _selectedSend;
+        public string SelectedSend
+        {
+            get { return _selectedSend; }
+            set
+            {
+                _selectedSend = value;
+                OnPropertyChanged(nameof(SelectedSend));
+            }
+        }
+
         // TreeViewの開閉トグル
         private bool _isExpanded { get; set; }
         public bool IsExpanded {
@@ -75,6 +144,11 @@ namespace JobManagementApp.ViewModels
             }
         }
 
+
+        // 検索欄表示 ボタン
+        public ICommand AreaVisibilityCommand { get; set; }
+        // 検索 ボタン
+        public ICommand SearchCommand { get; set; }
         // ユーザー保存 ボタン
         public ICommand CacheUserCommand { get; set; }
         // 画面更新ボタン
@@ -89,6 +163,8 @@ namespace JobManagementApp.ViewModels
         {
             // ボタンイベント 初期化
             _command = new MainCommand(this, IF);
+            AreaVisibilityCommand = new RelayCommand(_command.SearchAreaVisibility_Toggle);
+            SearchCommand = new RelayCommand(_command.SearchButton_Click);
             CacheUserCommand = new RelayCommand(_command.SaveUserButton_Click);
             RefreshCommand = new RelayCommand(_command.RefreshButton_Click);
             NewJobCommand = new RelayCommand(_command.NewJobButton_Click);
@@ -109,6 +185,17 @@ namespace JobManagementApp.ViewModels
                 exisItem.Execution = updateModel.Execution;
                 exisItem.JobBoolean = updateModel.JobBoolean;
                 exisItem.Status = updateModel.Status;
+            }
+        }
+
+        public double _borderHeight { get; set; }
+        public double BorderHeight
+        {
+            get { return _borderHeight; }
+            set
+            {
+                _borderHeight = value;
+                OnPropertyChanged(nameof(BorderHeight));
             }
         }
 
