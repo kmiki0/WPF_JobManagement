@@ -9,6 +9,7 @@ using JobManagementApp.Helpers;
 using System.Windows.Media.Animation;
 using System.Threading.Tasks;
 using System;
+using System.Windows.Media;
 
 namespace JobManagementApp.ViewModels
 {
@@ -123,6 +124,30 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(UserId));
             }
         }
+        
+        // 運用処理管理Rを検索する日付の範囲指定 FROM
+        private string _searchFromDate { get; set; }
+        public string SearchFromDate {
+            get => _searchFromDate;
+            set
+            {
+                _searchFromDate = value;
+                OnPropertyChanged(nameof(SearchFromDate));
+                _command?.CheckSearchDateTime(value, true);
+            }
+        }
+
+        // 運用処理管理Rを検索する日付の範囲指定 TO
+        private string _searchToDate { get; set; }
+        public string SearchToDate {
+            get => _searchToDate;
+            set
+            {
+                _searchToDate = value;
+                OnPropertyChanged(nameof(SearchToDate));
+            }
+        }
+
         // 運用処理管理R　取得時刻
         private string _displayUpdateDate { get; set; }
         public string DisplayUpdateDate {
@@ -147,6 +172,8 @@ namespace JobManagementApp.ViewModels
 
         // 検索欄表示 ボタン
         public ICommand AreaVisibilityCommand { get; set; }
+        // クリア ボタン
+        public ICommand ClearCommand { get; set; }
         // 検索 ボタン
         public ICommand SearchCommand { get; set; }
         // ユーザー保存 ボタン
@@ -164,6 +191,7 @@ namespace JobManagementApp.ViewModels
             // ボタンイベント 初期化
             _command = new MainCommand(this, IF);
             AreaVisibilityCommand = new RelayCommand(_command.SearchAreaVisibility_Toggle);
+            ClearCommand = new RelayCommand(_command.ClearButton_Click);
             SearchCommand = new RelayCommand(_command.SearchButton_Click);
             CacheUserCommand = new RelayCommand(_command.SaveUserButton_Click);
             RefreshCommand = new RelayCommand(_command.RefreshButton_Click);

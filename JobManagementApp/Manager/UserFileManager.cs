@@ -13,19 +13,18 @@ namespace JobManagementApp.Manager
         private string fileName = "UserCache";
 
         private string filePath;
-        private Dictionary<string, string> userFilePaths;
+        private Dictionary<string, string> Cache;
 
         public string CacheKey_UserId = "CACHEKEYUSERID";
         public string CacheKey_FilePath = "CACHEKEYFILEPATH";
+        public string CacheKey_SearchTime = "CACHEKEYSEARCHTime";
 
         public UserFileManager()
         {
-
-
             // プロジェクトのディレクトリにファイルを作成
             string projectDirectory = AppDomain.CurrentDomain.BaseDirectory;
             filePath = Path.Combine(projectDirectory, fileName);
-            userFilePaths = new Dictionary<string, string>();
+            Cache = new Dictionary<string, string>();
 
             // ファイルが存在しない場合、新規作成
             if (!File.Exists(filePath))
@@ -40,25 +39,25 @@ namespace JobManagementApp.Manager
         }
 
         // ユーザーIDとファイルパスを保存するメソッド
-        public void SaveUserFilePath(string userId, string userFilePath = "")
+        public void SaveCache(string key, string userFilePath = "")
         {
             if (!string.IsNullOrEmpty(userFilePath))
             {
-                userFilePaths[userId] = userFilePath;
+                Cache[key] = userFilePath;
             }
-            else if (!userFilePaths.ContainsKey(userId))
+            else if (!Cache.ContainsKey(key))
             {
-                userFilePaths[userId] = string.Empty;
+                Cache[key] = string.Empty;
             }
             SaveToFile();
         }
 
-        // ユーザーIDに対応するファイルパスを取得するメソッド
-        public string GetUserFilePath(string userId)
+        // Cacheキーに対応する値を取得するメソッド
+        public string GetCache(string key)
         {
-            if (userFilePaths.ContainsKey(userId))
+            if (Cache.ContainsKey(key))
             {
-                return userFilePaths[userId];
+                return Cache[key];
             }
             return string.Empty;
         }
@@ -68,7 +67,7 @@ namespace JobManagementApp.Manager
         {
             using (StreamWriter writer = new StreamWriter(filePath))
             {
-                foreach (var entry in userFilePaths)
+                foreach (var entry in Cache)
                 {
                     writer.WriteLine($"{entry.Key},{entry.Value}");
                 }
@@ -86,7 +85,7 @@ namespace JobManagementApp.Manager
                     var parts = line.Split(',');
                     if (parts.Length == 2)
                     {
-                        userFilePaths[parts[0]] = parts[1];
+                        Cache[parts[0]] = parts[1];
                     }
                 }
             }

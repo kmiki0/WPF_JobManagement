@@ -36,7 +36,7 @@ namespace JobManagementApp.Models
                 {
                     // キャッシュに保存
                     UserFileManager manager = new UserFileManager();
-                    manager.SaveUserFilePath(manager.CacheKey_FilePath, path.ToString());
+                    manager.SaveCache(manager.CacheKey_FilePath, path.ToString());
                     result = true;
                 }
             }

@@ -45,7 +45,7 @@ namespace JobManagementApp.Commands
 
             // キャッシュ読み込み
             UserFileManager manager = new UserFileManager();
-            _vm.TempSavePath = manager.GetUserFilePath(manager.CacheKey_FilePath);
+            _vm.TempSavePath = manager.GetCache(manager.CacheKey_FilePath);
 
             // ジョブID 読み込み
             LoadJobId();

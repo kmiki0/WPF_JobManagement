@@ -8,10 +8,8 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 using System.Collections.ObjectModel;
-using JobManagementApp.Services;
 using System.Windows.Threading;
 using JobManagementApp.Manager;
-using System.Windows.Controls;
 
 namespace JobManagementApp.Commands
 {
@@ -36,11 +34,14 @@ namespace JobManagementApp.Commands
         /// </summary> 
         private void Init()
         {
+            // 画面更新日時
             _vm.DisplayUpdateDate = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
 
             // キャッシュ読み込み
             UserFileManager manager = new UserFileManager();
-            _vm.UserId = manager.GetUserFilePath(manager.CacheKey_UserId);
+            _vm.UserId = manager.GetCache(manager.CacheKey_UserId);
+            var getSearchTime = manager.GetCache(manager.CacheKey_SearchTime);
+            _vm.SearchFromDate = getSearchTime == "" ? DateTime.Now.ToString("yyyy/MM/dd ") + "00:00" : DateTime.Now.ToString("yyyy/MM/dd ") + getSearchTime;
 
             // JOBリスト 作成
             CreateJobList();
@@ -58,7 +59,33 @@ namespace JobManagementApp.Commands
         public void SearchAreaVisibility_Toggle(object arg)
         {
             bool isOpen = arg.ToString() == "1" ? true : false;
-            _vm.BorderHeight = isOpen  ? 45 : 0;
+            _vm.BorderHeight = isOpen ? 102 : 0;
+        }
+
+        /// <summary> 
+        /// 日付項目がDateTime型に変換可能か
+        /// </summary> 
+        public void CheckSearchDateTime(string convertVal, bool isFrom)
+        {
+            DateTime date;
+            // 文字列をDateTimeに変換できるか判断
+            if (DateTime.TryParse(convertVal, out date) == false)
+            {
+                var textName = isFrom ? "検索日付(開始)" : "検索日付(終了)";
+                MessageBox.Show($"[検索項目] {textName} ： 日付変換できない形式が入力されてます。",
+                    "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+            }
+        }
+
+        /// <summary> 
+        /// クリアボタン　押下イベント
+        /// </summary> 
+        public void ClearButton_Click(object _)
+        {
+            _vm.Scenario = "";
+            _vm.JobId = "";
+            _vm.SelectedRecv = "";
+            _vm.SelectedSend = "";
         }
 
         /// <summary> 
@@ -72,9 +99,9 @@ namespace JobManagementApp.Commands
             _if.GetSearchJobList(_vm.Scenario, _vm.JobId, _vm.SelectedRecv, _vm.SelectedSend).ContinueWith(x =>
             {
                 // データが取得出来ない場合
-                if (x.Result.Count <= 0) 
+                if (x.Result.Count <= 0)
                 {
-                    MessageBox.Show("検索条件に合う ジョブが見つかりませんでした。", 
+                    MessageBox.Show("検索条件に合う ジョブが見つかりませんでした。",
                         "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 }
                 else
@@ -101,8 +128,25 @@ namespace JobManagementApp.Commands
                     GetUnyoCtlData();
                 }
             });
+
+            // キャッシュ保存処理
+            UserFileManager manager = new UserFileManager();
+            // 読み込みユーザー
+            if (manager.GetCache(manager.CacheKey_UserId) != _vm.UserId)
+            {
+                manager.SaveCache(manager.CacheKey_UserId, _vm.UserId);
+            }
+            // 検索日付 From
+            DateTime date;
+            if (DateTime.TryParse(_vm.SearchFromDate, out date))
+            {
+                var saveTime = date.Hour.ToString("00") + ":" + date.Minute.ToString("00");
+                if (manager.GetCache(manager.CacheKey_SearchTime) != saveTime)
+                {
+                    manager.SaveCache(manager.CacheKey_SearchTime, saveTime);
+                }
+            }
         }
-        
 
         /// <summary> 
         /// ユーザー保存　押下イベント
@@ -211,7 +255,7 @@ namespace JobManagementApp.Commands
         /// </summary> 
         private void SetComboBox()
         {
-            _if.GetRecvSend().ContinueWith(x => 
+            _if.GetRecvSend().ContinueWith(x =>
             {
                 // 受信先 データあれば、セット
                 if (x.Result.Item1.Count > 0)
@@ -266,41 +310,20 @@ namespace JobManagementApp.Commands
                 }
             }
 
-            var unyoDataList = new List<JobUnyoCtlModel>();
-
+            // 検索日付 チェック
+            var from = CheckSearchDate(_vm.SearchFromDate, true);
+            var to = CheckSearchDate(_vm.SearchToDate, false);
+            
             //運用処理管理Rの取得
-            DataTable dataTable = JobService.GetUnyoData(args);
-            if (dataTable.Rows.Count > 0)
+            _if.GetUnyoData(args, from, to).ContinueWith(x => 
             {
-                foreach (DataRow row in dataTable.Rows)
+                // 更新するリストに値がある場合のみ、更新
+                if (x.Result.Count > 0)
                 {
-                    var updDt = row["UPDDT"].ToString();
-
-                    DateTime updateDate = DateTime.ParseExact(updDt, "yyyy/MM/dd H:mm:ss", null);
-
-                    // 更新日付が本日日付のみ処理
-                    if (updateDate.ToString("yyyyMMdd") == DateTime.Now.ToString("yyyyMMdd"))
-                    {
-                        // eunm 対応 （ERROR = 3）
-                        var flg = row["SYRFLG"].ToString();
-
-                        unyoDataList.Add(new JobUnyoCtlModel
-                        {
-                            Scenario = row["SCENARIO"].ToString(),
-                            Eda = row["EDA"].ToString(),
-                            Id = row["JOBID"].ToString(),
-                            SyrFlg = flg == "9" ? "3" : flg,
-                            UpdDt = row["UPDDT"].ToString(),
-                        });
-                    }
+                    var updList = x.Result;
+                    UpdateJobsFromUnyoData(_vm.Jobs, ref updList);
                 }
-            }
-
-            // 更新するリストに値がある場合のみ、更新
-            if (unyoDataList.Count() > 0)
-            {
-                UpdateJobsFromUnyoData(_vm.Jobs, ref unyoDataList);
-            }
+            });
         }
 
         /// <summary> 
@@ -359,6 +382,43 @@ namespace JobManagementApp.Commands
             }
 
             return resultList;
+        }
+
+        /// <summary> 
+        /// 検索日付の型チェックと回避処理
+        /// </summary> 
+        /// <param name="isFrom">From条件の場合、True</param>
+        private string CheckSearchDate(string date, bool isFrom)
+        {
+            string result;
+            DateTime dateValue;
+
+            // To は、空白の場合 最新取得
+            if (isFrom == false) return DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+
+            // 文字列をDateTimeに変換できるか判断
+            if (DateTime.TryParse(date, out dateValue))
+            {
+                // 指定された形式に変換
+                result = dateValue.ToString("yyyy/MM/dd HH:mm");
+            }
+            else
+            {
+                // From/To によって、対処方法変える
+                if (isFrom)
+                {
+                    // Fromで変換できない場合、本日日付 + 00:00
+                    result = DateTime.Now.ToString("yyyy/MM/dd") + " 00:00";
+                }
+                else
+                {
+                    // Toで変換できない場合、現在時刻 +1 min
+                    result = DateTime.Now.AddMinutes(1.0).ToString("yyyy/MM/dd HH:mm");
+                }
+                
+            }
+
+            return result;
         }
 
 

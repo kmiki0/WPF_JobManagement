@@ -17,6 +17,8 @@ namespace JobManagementApp.Models
         bool SaveCacheUser(string userId);
         // 画面のジョブリスト取得
         Task<List<JobListItemViewModel>> CreateJobList(string userId);
+        // 対象ジョブの運用処理管理R 取得
+        Task<List<JobUnyoCtlModel>> GetUnyoData(List<JobUnyoCtlModel> jobs, string fromDate, string toDate);
         // 対象リストの運用処理の処理FLGを取得
         Task<DataTable> CreateJobList(List<JobUnyoCtlModel> targetList);
         // 検索条件を加えて、ジョブリストを取得
@@ -37,7 +39,7 @@ namespace JobManagementApp.Models
                 {
                     // キャッシュに保存
                     UserFileManager manager = new UserFileManager();
-                    manager.SaveUserFilePath(manager.CacheKey_UserId, userId.ToString());
+                    manager.SaveCache(manager.CacheKey_UserId, userId.ToString());
                     result = true;
                 }
             }
@@ -46,6 +48,49 @@ namespace JobManagementApp.Models
                 return false;
             }
 
+            return result;
+        }
+
+
+        /// <summary> 
+        /// 対象ジョブの運用処理管理R 取得
+        /// </summary> 
+        public async Task<List<JobUnyoCtlModel>> GetUnyoData(List<JobUnyoCtlModel> jobs, string fromDate, string toDate)
+        {
+            var result = new List<JobUnyoCtlModel>();
+
+            await Task.Run(() =>
+            {
+                // ジョブ管理を検索する
+                return JobService.GetUnyoData(jobs, fromDate, toDate);
+            }).ContinueWith(x =>
+            {
+                if (x.Result.Rows.Count > 0)
+                {
+                    foreach (DataRow row in x.Result.Rows)
+                    {
+                        var updDt = row["UPDDT"].ToString();
+
+                        DateTime updateDate = DateTime.ParseExact(updDt, "yyyy/MM/dd H:mm:ss", null);
+
+                        // 更新日付が本日日付のみ処理
+                        if (updateDate.ToString("yyyyMMdd") == DateTime.Now.ToString("yyyyMMdd"))
+                        {
+                            // eunm 対応 （ERROR = 3）
+                            var flg = row["SYRFLG"].ToString();
+
+                            result.Add(new JobUnyoCtlModel
+                            {
+                                Scenario = row["SCENARIO"].ToString(),
+                                Eda = row["EDA"].ToString(),
+                                Id = row["JOBID"].ToString(),
+                                SyrFlg = flg == "9" ? "3" : flg,
+                                UpdDt = row["UPDDT"].ToString(),
+                            });
+                        }
+                    }
+                }
+            });
             return result;
         }
 

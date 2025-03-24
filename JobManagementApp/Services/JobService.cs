@@ -15,7 +15,7 @@ namespace JobManagementApp.Services
         /// <summary> 
         /// シナリオと枝番から、運用処理管理Rの情報取得
         /// </summary> 
-        public static DataTable GetUnyoData(List<JobUnyoCtlModel> args)
+        public static DataTable GetUnyoData(List<JobUnyoCtlModel> args, string fromDate, string toDate)
         {
             DataTable dt = new DataTable();
             StringBuilder sql = new StringBuilder();
@@ -38,6 +38,8 @@ namespace JobManagementApp.Services
                 sql.Append("         left join JOB_MANEGMENT JOB_M ");
                 sql.Append("             on UNYO.JOBID = JOB_M.ID ");
                 sql.Append("     where");
+                // 日付で範囲指定
+                sql.Append($"         UNYO.UPDDT between to_date('{fromDate}', 'YYYY/MM/DD HH24:MI') AND TO_DATE('{toDate}', 'YYYY/MM/DD HH24:MI')");
                 // リストにあるものをすべて条件に追加
                 bool isFirst = true;
                 foreach (var arg in args)
@@ -45,6 +47,7 @@ namespace JobManagementApp.Services
                     if (isFirst)
                     {
                         isFirst = false;
+                        sql.Append($"        and ( ");
                     }
                     else
                     {
@@ -52,6 +55,7 @@ namespace JobManagementApp.Services
                     }
                     sql.Append($"        (JOB_M.SCENARIO = '{arg.Scenario}' and JOB_M.EDA = {arg.Eda}) ");
                 }
+                sql.Append($"        ) ");
                 sql.Append("     group by");
                 sql.Append("         UNYO.JOBID");
                 sql.Append("       , JOB_M.SCENARIO ");
@@ -584,7 +588,8 @@ namespace JobManagementApp.Services
                 // 条件　シナリオ (複数検索)
                 if (!string.IsNullOrEmpty(scenario))
                 {
-                    string[] scenarios = scenario.Split(',');
+                    // 全角のスペース、半角に置き換えして、分割
+                    string[] scenarios = scenario.Replace('　', ' ').Split(' ');
 
                     sql.Append($"  and JOB_M.SCENARIO in (");
                     // 「,」で複数件対応
@@ -600,7 +605,9 @@ namespace JobManagementApp.Services
                 // 条件　ジョブID (複数検索)
                 if (!string.IsNullOrEmpty(jobId))
                 {
-                    string[] jobIds = jobId.Split(',');
+
+                    // 全角のスペース、半角に置き換えして、分割
+                    string[] jobIds = jobId.Replace('　', ' ').Split(' ');
 
                     sql.Append($"  and JOB_M.ID in (");
                     // 「,」で複数件対応
