@@ -73,7 +73,7 @@ namespace JobManagementApp.ViewModels
             // コマンド 初期化
             _command = new JobLogCommand(this, IF);
             TempFolderUpdateCommand = new RelayCommand(_command.TempFolderButton_Click);
-            AddLogCommand = new RelayCommand(_command. AddLogButton_Click);
+            AddLogCommand = new RelayCommand(_command.AddLogButton_Click);
             FolderCommand = new RelayCommand(_command.FolderButton_Click);
             CloseCommand = new RelayCommand(_command.CloseButton_Click);
         }

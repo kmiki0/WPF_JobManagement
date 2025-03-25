@@ -30,6 +30,18 @@ namespace JobManagementApp.Helpers
 
             return null;
         }
+        public static Window GetJobLogDetailWindow()
+        {
+            foreach (Window window in Application.Current.Windows)
+            {
+                if (window is JobLogDetailWindow logWindow)
+                {
+                    return logWindow;
+                }
+            }
+
+            return null;
+        }
 
         /// <summary> 
         /// MainWindowから中心位置に引数のウィンドウ セット
