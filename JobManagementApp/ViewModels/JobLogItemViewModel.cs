@@ -21,6 +21,8 @@ namespace JobManagementApp.ViewModels
         public string Eda { get; set; }
          // ファイルタイプ
         public emFileType FileType { get; set; }
+        // 対象ファイル数
+        public int FileCount { get; set; }
         // ファイルパス
         public string FilePath { get; set; }
         // ファイル名
@@ -64,6 +66,17 @@ namespace JobManagementApp.ViewModels
             {
                 _size = value;
                 OnPropertyChanged(nameof(Size));
+            }
+        }
+
+        // 監視タイプ
+        private int _observerType { get; set; }
+        public int ObserverType {
+            get => _observerType;
+            set
+            {
+                _observerType = value;
+                OnPropertyChanged(nameof(ObserverType));
             }
         }
         

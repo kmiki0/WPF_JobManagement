@@ -11,6 +11,26 @@
         <local:FileTypeToJapaneseConverter x:Key="fileTypeToJapaneseConverter"/>
         <local:ObserverStatusToJapaneseConverter x:Key="observerStatusToJapaneseConverter"/>
 
+        <!-- 監視タイプによって、表示項目変える -->
+        <DataTemplate x:Key="TextBoxTemplate">
+            <TextBlock Text="{Binding Path=ObserverStatus, Converter={StaticResource observerStatusToJapaneseConverter}}" HorizontalAlignment="Center" Margin="5"/>
+        </DataTemplate>
+        <DataTemplate x:Key="ButtonTemplate">
+            <Border Background="Gainsboro" Style="{StaticResource CommandButtonBorder}">
+                <Button Command="{Binding AddLogCommand}" Style="{StaticResource NoStyleButton}">
+                    <Button.CommandParameter>
+                        <MultiBinding Converter="{StaticResource jobParamConverter}" >
+                            <Binding Path="Scenario" />
+                            <Binding Path="Eda" />
+                            <Binding Path="FileName" />
+                            <Binding Path="FilePath" />
+                        </MultiBinding>
+                    </Button.CommandParameter>
+                    <TextBlock FontWeight="Bold" Text="手動"/>
+                </Button>
+            </Border>
+        </DataTemplate>
+
         <Style x:Key="LogListItemBoderStyle" TargetType="Border">
             <Setter Property="BorderBrush" Value="Gainsboro" />
             <Setter Property="BorderThickness" Value="0.8" />
@@ -117,13 +137,26 @@
                                         <Setter Property="Background" Value="Khaki"/>
                                     </DataTrigger>
                                     <!-- 停止中 -->
-                                    <DataTrigger Binding="{Binding ObserverStatus}" Value="9">
+                                    <DataTrigger Binding="{Binding ObserverStatus}" Value="2">
                                         <Setter Property="Background" Value="Gainsboro"/>
                                     </DataTrigger>
                                 </Style.Triggers> 
                             </Style>
                         </Border.Style>
-                        <TextBlock Text="{Binding Path=ObserverStatus, Converter={StaticResource observerStatusToJapaneseConverter}}" HorizontalAlignment="Center" Margin="5"/>
+                        <ContentControl Content="{Binding}">
+                            <ContentControl.Style>
+                                <Style TargetType="ContentControl">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ObserverType}" Value="0">
+                                            <Setter Property="ContentTemplate" Value="{StaticResource TextBoxTemplate}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ObserverType}" Value="1">
+                                            <Setter Property="ContentTemplate" Value="{StaticResource ButtonTemplate}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ContentControl.Style>
+                        </ContentControl>
                     </Border>
 
                     <!-- ファイルコピーパーセント -->

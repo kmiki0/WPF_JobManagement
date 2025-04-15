@@ -50,9 +50,9 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(SelectedFileType));
             }
         }
-        // 監視タイプ（自動・手動）
-        private bool _observerType { get; set; }
-        public bool ObserverType
+        // 監視タイプ（自動(0)・手動(1)）
+        private int _observerType { get; set; }
+        public int ObserverType
         {
             get { return _observerType; }
             set
@@ -85,11 +85,10 @@ namespace JobManagementApp.ViewModels
         public JobLogDetailViewModel(IJobLogDetailModel IF, string scenario, string eda)
         {
             // 初期値セット
-            this.ObserverType = true;
             this.IsButtonEnabled = true;
             this.Scenario = scenario;
             this.Eda = eda;
-            this.ObserverType = true;
+            this.ObserverType = 0;
 
             // コマンド 初期化
             _command = new JobLogDetailCommand(this, IF);

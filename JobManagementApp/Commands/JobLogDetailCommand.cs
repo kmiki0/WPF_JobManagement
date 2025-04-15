@@ -40,7 +40,7 @@ namespace JobManagementApp.Commands
                     _vm.FilePath = x.Result.FILEPATH;
                     _vm.OldFilePath = x.Result.FILEPATH;
                     _vm.SelectedFileType = (emFileType)x.Result.FILETYPE;
-                    _vm.ObserverType = x.Result.OBSERVERTYPE != 0;
+                    _vm.ObserverType = x.Result.OBSERVERTYPE;
                 }
             });
         }
@@ -160,7 +160,7 @@ namespace JobManagementApp.Commands
                 FILEPATH = _vm.FilePath,
                 OLDFILEPATH = _vm.OldFilePath,
                 FILETYPE = (int)_vm.SelectedFileType,
-                OBSERVERTYPE = _vm.ObserverType ? 1 : 0,
+                OBSERVERTYPE = _vm.ObserverType,
             };
         }
     }

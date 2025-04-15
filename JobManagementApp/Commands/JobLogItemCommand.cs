@@ -40,6 +40,15 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary> 
+        /// 手動ログ取得 押下イベント
+        /// </summary> 
+        public void ManualLogButton_Click(object _)
+        {
+            
+
+        }
+
+        /// <summary> 
         /// ログ編集ウィンドウ Closeイベント
         /// </summary> 
         private void LogDetailWindow_RequestClose(object sender, JobParamModel e)

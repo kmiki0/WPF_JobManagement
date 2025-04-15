@@ -97,6 +97,7 @@ namespace JobManagementApp.Models
                             FILEPATH = row["FILEPATH"].ToString(),
                             FILENAME = row["FILENAME"].ToString(),
                             FILETYPE = int.Parse(row["FILETYPE"].ToString()),
+                            FILECOUNT = int.Parse(row["FILECOUNT"].ToString()),
                             OBSERVERTYPE = int.Parse(row["OBSERVERTYPE"].ToString()),
                         };
                         logList.Add(item);

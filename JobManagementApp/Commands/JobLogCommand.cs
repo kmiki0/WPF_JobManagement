@@ -1,10 +1,4 @@
-﻿using JobManagementApp.BaseClass;
-using JobManagementApp.Helpers;
-using JobManagementApp.Manager;
-using JobManagementApp.Models;
-using JobManagementApp.ViewModels;
-using JobManagementApp.Views;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -12,10 +6,17 @@ using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using JobManagementApp.Views;
+using JobManagementApp.ViewModels;
+using JobManagementApp.Models;
+using JobManagementApp.Manager;
+using JobManagementApp.Helpers;
+using JobManagementApp.BaseClass;
+using System.Windows.Threading;
+using System.Text.RegularExpressions;
 
 namespace JobManagementApp.Commands
 {
@@ -67,13 +68,15 @@ namespace JobManagementApp.Commands
                     // enum変換
                     emFileType fileType = Enum.TryParse(job.FILETYPE.ToString(), out fileType) ? fileType : emFileType.LOG;
 
-                    var item = new JobLogItemViewModel{
+                    var item = new JobLogItemViewModel {
                         Scenario = job.SCENARIO,
                         Eda = job.EDA,
                         FilePath = job.FILEPATH,
                         FileName = job.FILENAME,
                         DisplayFileName = job.FILENAME,
                         FileType = fileType,
+                        FileCount = job.FILECOUNT,
+                        ObserverType = job.OBSERVERTYPE,
                         ObserverStatus = emObserverStatus.OBSERVER
                     };
                     logList.Add(item);
@@ -192,16 +195,89 @@ namespace JobManagementApp.Commands
         }
 
 
+        // ==================================
+        // 　ログ監視
+        // ==================================
+
+        public void StartMonitoring()
+        {
+            using (MultiFileWatcher _multiWatcher = new MultiFileWatcher(_vm.Logs.ToList(), _vm.TempSavePath))
+            {
+                _multiWatcher.ProgressChanged += (filePath, totalSize, percent) =>
+                {
+                    // 複数ファイル対応
+                    bool isMultiLog = false;
+
+                    _vm.ToCopyFolderPath = Path.GetDirectoryName(filePath);
+
+                    // 進行状況を画面に表示するコード
+                    var log = _vm.Logs.ToList().Where(x => Path.Combine(x.FilePath, x.DisplayFileName) == filePath).FirstOrDefault();
+
+                    // csv, tsvの場合は、先頭の日付を抜いて検索
+                    if (log is null)
+                    {
+                        // 正規表現で日付部分とその後のアンダーバーを取り除く
+                        var fileName = Regex.Replace(Path.GetFileName(filePath), @"^\d{14}_?", "");
+                        // 初回のみ、ここであたる
+                        log = _vm.Logs.ToList().Where(x => x.FileName == fileName && x.DisplayFileName == x.FileName).FirstOrDefault();
+                        // マルチログ対応
+                        isMultiLog = true;
+                    }
+
+                    // マルチログ + logがNullの場合、複数ログありとなるため、新規でlogに追加
+                    if (isMultiLog && log is null)
+                    {
+                        // ファイル名が類似のものを参照して、新しくLogに追加
+                        var fileName = Regex.Replace(Path.GetFileName(filePath), @"^\d{14}_?", "");
+                        log = _vm.Logs.ToList().Where(x => x.FileName == fileName).FirstOrDefault();
+
+                        var logList = _vm.Logs.ToList();
+                        logList.Add(new JobLogItemViewModel
+                        {
+                            Scenario = log.Scenario,
+                            Eda = log.Eda,
+                            FilePath = log.FilePath,
+                            FileName = log.FileName,
+                            DisplayFileName = Path.GetFileName(filePath),
+                            FileType = log.FileType,
+                            FileCount = log.FileCount,
+                            ObserverType = log.ObserverType,
+                            Size = totalSize.ToString("N0") + " KB",
+                            CopyPercent = percent.ToString() + " %",
+                            ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS: emObserverStatus.OBSERVER,
+                        });
+
+                        _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
+                    }
+                    // logがある場合、画面値 更新
+                    else if (log != null)
+                    {
+                        log.DisplayFileName = Path.GetFileName(filePath);
+                        log.Size = totalSize.ToString("N0") + " KB";
+                        log.CopyPercent = percent.ToString() + " %";
+                        if (percent >= 100)
+                        {
+                            log.ObserverStatus = emObserverStatus.SUCCESS;
+                        }
+                    }
+                };
+            }
+
+        }
+
 
 
         // ======================================
         // 以下、別ファイル予定
         // ======================================
         // 関連ファイルの監視を開始
-        public void StartMonitoring()
+        public void StartMonitoring1()
         {
-            foreach (var log in _vm.Logs)
+            foreach (JobLogItemViewModel log in _vm.Logs)
             {
+                // 監視タイプが自動(0)でなければ、監視しない
+                if (log.ObserverType == 1) continue;
+
                 // タイプによって、検索方法を変える
                 if (log.FileType == emFileType.LOG)
                 {
@@ -228,8 +304,8 @@ namespace JobManagementApp.Commands
                     NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size
                 };
 
-                watcher.Changed += (sender, e) => OnFixedFileChanged(log);
-                watcher.EnableRaisingEvents = true;
+                watcher.Changed += (sender, e) => OnFixedFileChanged(log); // 変更時
+                watcher.EnableRaisingEvents = true; // 監視開始
                 watchers[log.FileName] = watcher;
 
                 // 初期状態でファイル情報を取得
@@ -285,6 +361,7 @@ namespace JobManagementApp.Commands
         {
             var latestFile = Directory.GetFiles(log.FilePath, $"*{log.FileName}")
                                       .Select(f => new FileInfo(f))
+                                      .Where(s => s.LastWriteTime > DateTime.Now)
                                       .OrderByDescending(f => f.LastWriteTime)
                                       .FirstOrDefault();
 
@@ -342,7 +419,6 @@ namespace JobManagementApp.Commands
                         string sourceFilePath = $@"{Path.Combine(log.FilePath, log.DisplayFileName)}";
                         string destinationFilePath = $@"{Path.Combine(_vm.ToCopyFolderPath, log.DisplayFileName)}";
 
-
                         if (ShouldCopyFile(sourceFilePath, destinationFilePath))
                         {
                             // コピー実施する場合、パーセント表示する
@@ -376,18 +452,17 @@ namespace JobManagementApp.Commands
             }
         }
 
-        public bool ShouldCopyFile(string sourceFilePath, string destinationFilePath)
+        // ファイルをコピーするか判断
+        public bool ShouldCopyFile(string parentFilePath, string copyFilePath)
         {
-            if (!File.Exists(destinationFilePath))
-            {
-                return true;
-            }
+            // コピー先ファイルが存在しない場合、True
+            if (!File.Exists(copyFilePath)) return true; 
 
-            FileInfo sourceFileInfo = new FileInfo(sourceFilePath);
-            FileInfo destinationFileInfo = new FileInfo(destinationFilePath);
+            FileInfo parentFile = new FileInfo(parentFilePath);
+            FileInfo copyFile = new FileInfo(copyFilePath);
 
-            return sourceFileInfo.Length != destinationFileInfo.Length ||
-                   sourceFileInfo.LastWriteTime != destinationFileInfo.LastWriteTime;
+            // サイズと更新日付を比較する
+            return parentFile.Length != copyFile.Length || parentFile.LastWriteTime != copyFile.LastWriteTime;
         }
 
         public async Task CopyFileWithProgress(string sourceFilePath, string destinationFilePath, JobLogItemViewModel log)
@@ -419,7 +494,6 @@ namespace JobManagementApp.Commands
                         }
                     }
                 }
-
             }
             finally
             {

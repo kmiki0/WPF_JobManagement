@@ -89,6 +89,8 @@ namespace JobManagementApp.Models
         public string OLDFILEPATH { get; set; }
         //ファイルタイプ
         public int FILETYPE { get; set; }
+        //ファイルカウント
+        public int FILECOUNT { get; set; }
         //監視タイプ
         public int OBSERVERTYPE { get; set; }
     }
