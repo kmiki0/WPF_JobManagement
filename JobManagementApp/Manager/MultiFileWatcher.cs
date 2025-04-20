@@ -20,9 +20,9 @@ namespace JobManagementApp.Manager
         private readonly FileCopyProgress _fileCopyProgress = new FileCopyProgress();
         private bool _isStopped = false;
         private string _copyBasePath; // コピー先 フォルダ
-        private readonly string _fileNamePrefix;
+        //private readonly string _fileNamePrefix;
 
-        public event Action<string, int, int> ProgressChanged;
+        public event Action<string, string, int, int> ProgressChanged;
 
         public MultiFileWatcher(List<JobLogItemViewModel> logs, string copyDirectoryPath)
         {
@@ -46,11 +46,11 @@ namespace JobManagementApp.Manager
                 }
             }
 
-            _fileCopyProgress.ProgressChanged += (fileName, totalSize, progress) =>
+            _fileCopyProgress.ProgressChanged += (fileName, destPath, totalSize, progress) =>
             {
                 if (!_isStopped)
                 {
-                    ProgressChanged?.Invoke(fileName, totalSize, progress);
+                    ProgressChanged?.Invoke(fileName, destPath, totalSize, progress);
                 }
             };
         }
@@ -115,7 +115,7 @@ namespace JobManagementApp.Manager
 
             // ① 検知直後のファイル情報 取得
             FileInfo beforeFile = new FileInfo(fullPath);
-            await Task.Delay(3000); // 3秒待機
+            await Task.Delay(1000); // 1秒待機
             // ② 検知してから数秒後のファイル情報 取得
             FileInfo afterFile = new FileInfo(fullPath);
 
@@ -156,7 +156,7 @@ namespace JobManagementApp.Manager
             {
                 if (!_multiWatchers.ContainsKey(file.FullName))
                 {
-                    await AddFileToWatch(file.FullName, true);
+                    Task.Run(() => AddFileToWatch(file.FullName, true));
                 }
             }
 

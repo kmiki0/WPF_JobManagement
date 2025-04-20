@@ -7,6 +7,7 @@ using JobManagementApp.Services;
 using JobManagementApp.Helpers;
 using JobManagementApp.BaseClass;
 using System.Linq;
+using JobManagementApp.Manager;
 
 namespace JobManagementApp.Commands
 {
@@ -91,6 +92,14 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void LogWindow_Closed(object sender, EventArgs e)
         {
+            // 
+            JobLogWindow jobLogWindow = sender as JobLogWindow;
+            if (jobLogWindow != null)
+            {
+                JobLogViewModel vm = (JobLogViewModel)jobLogWindow.DataContext;
+                vm._command._multiFileWatcher.Dispose();
+            }
+
             // MainWindow アクティブ
             System.Windows.Window mainWindow = WindowHelper.GetMainWindow();
             if (mainWindow != null) mainWindow.Activate();

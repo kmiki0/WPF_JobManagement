@@ -1,5 +1,6 @@
 ﻿using JobManagementApp.Commands;
 using JobManagementApp.Helpers;
+using JobManagementApp.Manager;
 using JobManagementApp.Models;
 using JobManagementApp.Views;
 using System.Collections.ObjectModel;
@@ -14,7 +15,7 @@ namespace JobManagementApp.ViewModels
         public Window window { get; set; }
 
         // イベント処理
-        private readonly JobLogCommand _command;
+        public JobLogCommand _command;
 
         // シナリオ
         public string Scenario { get; set; }
