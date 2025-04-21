@@ -242,9 +242,11 @@ namespace JobManagementApp.Commands
                             FileCount = log.FileCount,
                             ObserverType = log.ObserverType,
                             Size = totalSize.ToString("N0") + " KB",
+                            UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss"),
                             CopyPercent = percent.ToString() + " %",
                             ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS: emObserverStatus.OBSERVER,
                         });
+
 
                         _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
                     }
@@ -254,6 +256,7 @@ namespace JobManagementApp.Commands
                         log.DisplayFileName = Path.GetFileName(filePath);
                         log.Size = totalSize.ToString("N0") + " KB";
                         log.CopyPercent = percent.ToString() + " %";
+                        log.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
 
                         if (percent >= 100)
                         {

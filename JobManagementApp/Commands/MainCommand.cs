@@ -10,6 +10,7 @@ using System.Linq;
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using JobManagementApp.Manager;
+using System.Threading.Tasks;
 
 namespace JobManagementApp.Commands
 {
@@ -93,6 +94,10 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void SearchButton_Click(object _)
         {
+            // ボタン処理可能か
+            if (!_vm.IsButtonEnabled) return;
+            _vm.IsButtonEnabled = false;
+
             // TreeView状態　初期化
             _vm.IsExpanded = false;
 
@@ -127,6 +132,9 @@ namespace JobManagementApp.Commands
                     // 運用処理管理Rの検索
                     GetUnyoCtlData();
                 }
+
+                // ボタン使用可に戻す
+                _vm.IsButtonEnabled = true;
             });
 
             // キャッシュ保存処理
@@ -168,9 +176,17 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void RefreshButton_Click(object _)
         {
-            CreateJobList();
+            // ボタン処理可能か
+            if (!_vm.IsButtonEnabled) return;
+            _vm.IsButtonEnabled = false;
+
+            Task.Run(() => CreateJobList()).ContinueWith(x => { 
+                // ボタン使用可に戻す
+                _vm.IsButtonEnabled = true;
+            });
             // 項目初期化
             _vm.IsExpanded = false;
+
         }
 
         /// <summary> 
@@ -393,8 +409,8 @@ namespace JobManagementApp.Commands
             string result;
             DateTime dateValue;
 
-            // To は、空白の場合 最新取得
-            if (isFrom == false) return DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+            // To は、空白の場合 現在時刻 +10 min
+            if (isFrom == false) return DateTime.Now.AddMinutes(10.0).ToString("yyyy/MM/dd HH:mm");
 
             // 文字列をDateTimeに変換できるか判断
             if (DateTime.TryParse(date, out dateValue))
@@ -412,8 +428,8 @@ namespace JobManagementApp.Commands
                 }
                 else
                 {
-                    // Toで変換できない場合、現在時刻 +1 min
-                    result = DateTime.Now.AddMinutes(1.0).ToString("yyyy/MM/dd HH:mm");
+                    // Toで変換できない場合、現在時刻 +10 min
+                    result = DateTime.Now.AddMinutes(10.0).ToString("yyyy/MM/dd HH:mm");
                 }
                 
             }

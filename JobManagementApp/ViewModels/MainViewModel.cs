@@ -183,11 +183,26 @@ namespace JobManagementApp.ViewModels
         // ジョブ追加　ボタン
         public ICommand NewJobCommand { get; set; }
 
+        // ボタン処理可能
+        private bool _isButtonEnabled;
+        public bool IsButtonEnabled
+        {
+            get { return _isButtonEnabled; }
+            set
+            {
+                _isButtonEnabled = value;
+                OnPropertyChanged(nameof(IsButtonEnabled));
+            }
+        }
+
         /// <summary>
         /// Init
         /// </summary>
         public MainViewModel(IMainModel IF)
         {
+            // 初期値セット
+            this.IsButtonEnabled = true;
+            
             // ボタンイベント 初期化
             _command = new MainCommand(this, IF);
             AreaVisibilityCommand = new RelayCommand(_command.SearchAreaVisibility_Toggle);
