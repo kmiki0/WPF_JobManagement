@@ -396,13 +396,18 @@ namespace JobManagementApp.Services
             {
                 // SQL作成
                 sql.Append("select");
-                sql.Append("  *　");
-                sql.Append("from ");
-                sql.Append("  JOB_LINKFILE ");
+                sql.Append("    JM.ID");
+                sql.Append("    , JL.* ");
+                sql.Append("from");
+                sql.Append("    JOB_LINKFILE JL ");
+                sql.Append("    left join JOB_MANEGMENT JM ");
+                sql.Append("        on JL.SCENARIO = JM.SCENARIO ");
+                sql.Append("        and JL.EDA = JM.EDA ");
                 sql.Append("where");
-                sql.Append($" SCENARIO = '{scenario}' ");
-                sql.Append($" and EDA = {eda} ");
-                sql.Append("ORDER BY FILETYPE");
+                sql.Append($"    JL.SCENARIO = '{scenario}' ");
+                sql.Append($"    and JL.EDA = {eda} ");
+                sql.Append("order by");
+                sql.Append("    JL.FILETYPE");
 
                 // SQL取得
                 if (DatabaseManager.Instance.pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)

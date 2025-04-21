@@ -71,6 +71,7 @@ namespace JobManagementApp.Commands
                     var item = new JobLogItemViewModel {
                         Scenario = job.SCENARIO,
                         Eda = job.EDA,
+                        Id = job.JOBID,
                         FilePath = job.FILEPATH,
                         FileName = job.FILENAME,
                         DisplayFileName = job.FILENAME,
@@ -167,6 +168,19 @@ namespace JobManagementApp.Commands
         public void FolderButton_Click(object prm)
         {
             string path = prm?.ToString();
+            //　空の場合、セーブしているフォルダ名 + yyyyMMdd + 機能IDでパス作成
+            if (string.IsNullOrEmpty(path))
+            {
+                var yyyyMMdd = DateTime.Now.ToString("yyyyMMdd");
+                path = Path.Combine(_vm.TempSavePath, yyyyMMdd);
+                path = Path.Combine(path, _vm.Id); 
+            }
+
+            // フォルダが存在しない場合は作成
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
 
             if (!string.IsNullOrEmpty(path))
             {
@@ -207,7 +221,7 @@ namespace JobManagementApp.Commands
                     // 複数ファイル対応
                     bool isMultiLog = false;
 
-                    _vm.ToCopyFolderPath = Path.GetDirectoryName(filePath);
+                    _vm.ToCopyFolderPath = Path.GetDirectoryName(destPath);
 
                     // 進行状況を画面に表示するコード
                     var log = _vm.Logs.ToList().Where(x => Path.Combine(x.FilePath, x.DisplayFileName) == filePath).FirstOrDefault();

@@ -37,12 +37,12 @@ namespace JobManagementApp.Manager
                 if (log.FileType == emFileType.LOG)
                 {
                     // 通常用FileWatcherを使用
-                    Task.Run(() => AddFileToWatch(fullPath));
+                    Task.Run(() => AddFileToWatch(log.Id, fullPath));
                 }
                 else
                 {
                     // 複数用FileWatcherを使用
-                    Task.Run(() => AddMultiFileToWatch(fullPath, log.FileCount));
+                    Task.Run(() => AddMultiFileToWatch(log.Id, fullPath, log.FileCount));
                 }
             }
 
@@ -57,7 +57,7 @@ namespace JobManagementApp.Manager
 
 
         // FileWatcherに登録
-        private async Task AddFileToWatch(string fullPath, bool isMulti = false)
+        private async Task AddFileToWatch(string jobId, string fullPath, bool isMulti = false)
         {
             var watcher = new FileSystemWatcher(Path.GetDirectoryName(fullPath))
             {
@@ -65,7 +65,7 @@ namespace JobManagementApp.Manager
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
             };
 
-            watcher.Changed += async (sender, e) => await OnChanged(fullPath);
+            watcher.Changed += async (sender, e) => await OnChanged(jobId, fullPath);
             watcher.EnableRaisingEvents = true;
 
             if (isMulti)
@@ -79,7 +79,7 @@ namespace JobManagementApp.Manager
                 _watchers[fullPath] = watcher;
             }
 
-            await OnChanged(fullPath);
+            await OnChanged(jobId, fullPath);
         }
 
         /// <summary>
@@ -87,7 +87,7 @@ namespace JobManagementApp.Manager
         /// </summary>
         /// <param name="fullPath">対象のファイルパス</param>
         /// <param name="fileCount">範囲検索するファイル数</param>
-        private async Task AddMultiFileToWatch(string fullPath, int fileCount)
+        private async Task AddMultiFileToWatch(string jobId, string fullPath, int fileCount)
         {
             // （前方一致）ファイル名
             var watcher = new FileSystemWatcher(Path.GetDirectoryName(fullPath))
@@ -96,20 +96,20 @@ namespace JobManagementApp.Manager
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
             };
 
-            watcher.Changed += async (sender, e) => await OnMultiFileChanged(fullPath, fileCount);
+            watcher.Changed += async (sender, e) => await OnMultiFileChanged(jobId, fullPath, fileCount);
             watcher.EnableRaisingEvents = true;
 
             _watchers[fullPath] = watcher;
 
             // 初回は登録
-            await OnMultiFileChanged(fullPath, fileCount);
+            await OnMultiFileChanged(jobId, fullPath, fileCount);
         }
 
 
         // ファイルの変更を検知して、数秒後のファイルを比較して変更がなければコピーする
         // コピー先のフォルダを指定するために、「ジョブID」が必要
         // LineConuntの判断するために、「FileType」が必要
-        private async Task OnChanged(string fullPath)
+        private async Task OnChanged(string jobId, string fullPath)
         {
             if (_isStopped) return;
 
@@ -131,7 +131,7 @@ namespace JobManagementApp.Manager
                 // 日付のコピーフォルダパス 作成
                 var todayCopyPath = Path.Combine(_copyBasePath, DateTime.Now.ToString("yyyyMMdd"));
                 // 機能ID 付与
-                var copyPath = Path.Combine(todayCopyPath, "PGID");
+                var copyPath = Path.Combine(todayCopyPath, jobId);
                 
                 // コピー先フォルダが存在しない場合、フォルダ 作成
                 if (!Directory.Exists(copyPath)) Directory.CreateDirectory(copyPath); 
@@ -145,7 +145,7 @@ namespace JobManagementApp.Manager
             }
         }
 
-        private async Task OnMultiFileChanged(string fullPath, int fileCount)
+        private async Task OnMultiFileChanged(string jobId, string fullPath, int fileCount)
         {
             if (_isStopped) return;
 
@@ -156,7 +156,7 @@ namespace JobManagementApp.Manager
             {
                 if (!_multiWatchers.ContainsKey(file.FullName))
                 {
-                    Task.Run(() => AddFileToWatch(file.FullName, true));
+                    Task.Run(() => AddFileToWatch(jobId, file.FullName, true));
                 }
             }
 

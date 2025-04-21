@@ -94,6 +94,7 @@ namespace JobManagementApp.Models
                         var item = new JobLinkFile{
                             SCENARIO = row["SCENARIO"].ToString(),
                             EDA = row["EDA"].ToString(),
+                            JOBID = row["ID"].ToString(),
                             FILEPATH = row["FILEPATH"].ToString(),
                             FILENAME = row["FILENAME"].ToString(),
                             FILETYPE = int.Parse(row["FILETYPE"].ToString()),

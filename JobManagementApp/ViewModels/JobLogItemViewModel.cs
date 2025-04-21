@@ -19,6 +19,8 @@ namespace JobManagementApp.ViewModels
         public string Scenario { get; set; }
         // 枝番
         public string Eda { get; set; }
+        // ジョブID
+        public string Id { get; set; }
          // ファイルタイプ
         public emFileType FileType { get; set; }
         // 対象ファイル数
