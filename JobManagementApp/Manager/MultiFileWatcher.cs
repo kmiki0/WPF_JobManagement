@@ -24,6 +24,17 @@ namespace JobManagementApp.Manager
 
         public event Action<string, string, int, int> ProgressChanged;
 
+
+        private class LogInfo
+        {
+            public string JobId { get; set; }
+            public string LogFromPath { get; set; }
+            public string LogToPath { get; set; }
+            public int FileCount { get; set; }
+            public int FileSize { get; set; }
+            public bool IsMultiFile{ get; set; }
+        } 
+
         public MultiFileWatcher(List<JobLogItemViewModel> logs, string copyDirectoryPath)
         {
             // コピー先フォルダ（元）
@@ -32,17 +43,26 @@ namespace JobManagementApp.Manager
             // 非同期処理
             foreach (JobLogItemViewModel log in logs)
             {
-                string fullPath = Path.Combine(log.FilePath, log.FileName);
+                // watcher 受渡用の型にセット
+                var logInfo = new LogInfo
+                {
+                    JobId = log.Id,
+                    LogFromPath = Path.Combine(log.FilePath, log.FileName),
+                    FileCount = log.FileCount,
+                };
+
                 // 使用するFileWatcherの分岐
                 if (log.FileType == emFileType.LOG)
                 {
                     // 通常用FileWatcherを使用
-                    Task.Run(() => AddFileToWatch(log.Id, fullPath));
+                    logInfo.IsMultiFile = false;
+                    Task.Run(() => AddFileToWatch(logInfo));
                 }
                 else
                 {
                     // 複数用FileWatcherを使用
-                    Task.Run(() => AddMultiFileToWatch(log.Id, fullPath, log.FileCount));
+                    logInfo.IsMultiFile = true;
+                    Task.Run(() => AddMultiFileToWatch(logInfo));
                 }
             }
 
@@ -57,29 +77,29 @@ namespace JobManagementApp.Manager
 
 
         // FileWatcherに登録
-        private async Task AddFileToWatch(string jobId, string fullPath, bool isMulti = false)
+        private async Task AddFileToWatch(LogInfo info)
         {
-            var watcher = new FileSystemWatcher(Path.GetDirectoryName(fullPath))
+            var watcher = new FileSystemWatcher(Path.GetDirectoryName(info.LogFromPath))
             {
-                Filter = Path.GetFileName(fullPath),
+                Filter = Path.GetFileName(info.LogFromPath),
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
             };
 
-            watcher.Changed += async (sender, e) => await OnChanged(jobId, fullPath);
+            watcher.Changed += async (sender, e) => await OnChanged(info);
             watcher.EnableRaisingEvents = true;
 
-            if (isMulti)
+            if (info.IsMultiFile)
             {
                 // 複数用
-                _multiWatchers[fullPath] = watcher;
+                _multiWatchers[info.LogFromPath] = watcher;
             }
             else
             {
                 // 通常用
-                _watchers[fullPath] = watcher;
+                _watchers[info.LogFromPath] = watcher;
             }
 
-            await OnChanged(jobId, fullPath);
+            await OnChanged(info);
         }
 
         /// <summary>
@@ -87,37 +107,35 @@ namespace JobManagementApp.Manager
         /// </summary>
         /// <param name="fullPath">対象のファイルパス</param>
         /// <param name="fileCount">範囲検索するファイル数</param>
-        private async Task AddMultiFileToWatch(string jobId, string fullPath, int fileCount)
+        private async Task AddMultiFileToWatch(LogInfo info)
         {
             // （前方一致）ファイル名
-            var watcher = new FileSystemWatcher(Path.GetDirectoryName(fullPath))
+            var watcher = new FileSystemWatcher(Path.GetDirectoryName(info.LogFromPath))
             {
-                Filter = $"*{Path.GetFileName(fullPath)}",
+                Filter = $"*{Path.GetFileName(info.LogFromPath)}",
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
             };
 
-            watcher.Changed += async (sender, e) => await OnMultiFileChanged(jobId, fullPath, fileCount);
+            watcher.Changed += async (sender, e) => await OnMultiFileChanged(info);
             watcher.EnableRaisingEvents = true;
 
-            _watchers[fullPath] = watcher;
+            _watchers[info.LogFromPath] = watcher;
 
             // 初回は登録
-            await OnMultiFileChanged(jobId, fullPath, fileCount);
+            await OnMultiFileChanged(info);
         }
 
 
         // ファイルの変更を検知して、数秒後のファイルを比較して変更がなければコピーする
-        // コピー先のフォルダを指定するために、「ジョブID」が必要
-        // LineConuntの判断するために、「FileType」が必要
-        private async Task OnChanged(string jobId, string fullPath)
+        private async Task OnChanged(LogInfo info)
         {
             if (_isStopped) return;
 
             // ① 検知直後のファイル情報 取得
-            FileInfo beforeFile = new FileInfo(fullPath);
+            FileInfo beforeFile = new FileInfo(info.LogFromPath);
             await Task.Delay(1000); // 1秒待機
             // ② 検知してから数秒後のファイル情報 取得
-            FileInfo afterFile = new FileInfo(fullPath);
+            FileInfo afterFile = new FileInfo(info.LogFromPath);
 
             // ①と②のファイル情報を比較して、同じであればジョブ終了とする
             if (beforeFile.Length == afterFile.Length && beforeFile.LastWriteTime == afterFile.LastWriteTime)
@@ -131,32 +149,38 @@ namespace JobManagementApp.Manager
                 // 日付のコピーフォルダパス 作成
                 var todayCopyPath = Path.Combine(_copyBasePath, DateTime.Now.ToString("yyyyMMdd"));
                 // 機能ID 付与
-                var copyPath = Path.Combine(todayCopyPath, jobId);
+                var copyPath = Path.Combine(todayCopyPath, info.JobId);
                 
                 // コピー先フォルダが存在しない場合、フォルダ 作成
                 if (!Directory.Exists(copyPath)) Directory.CreateDirectory(copyPath); 
 
                 // コピー元ファイル
-                string parentFilePath = fullPath;
-                string copyFilePath = Path.Combine(copyPath, Path.GetFileName(fullPath));
+                string parentFilePath = info.LogFromPath;
+                string copyFilePath = Path.Combine(copyPath, Path.GetFileName(info.LogFromPath));
 
                 // コピー実施
                 await _fileCopyProgress.CopyFile(parentFilePath, copyFilePath);
             }
         }
 
-        private async Task OnMultiFileChanged(string jobId, string fullPath, int fileCount)
+        private async Task OnMultiFileChanged(LogInfo info)
         {
             if (_isStopped) return;
 
             // 最新の5件のファイルを取得して監視対象を更新
-            var latestFiles = GetLatestFiles(fullPath, fileCount);
+            List<FileInfo> latestFiles = GetLatestFiles(info.LogFromPath, info.FileCount);
 
-            foreach (var file in latestFiles)
+            foreach (FileInfo file in latestFiles)
             {
                 if (!_multiWatchers.ContainsKey(file.FullName))
                 {
-                    Task.Run(() => AddFileToWatch(jobId, file.FullName, true));
+                    var logInfo = new LogInfo{
+                        JobId = info.JobId,
+                        LogFromPath = file.FullName,
+                        FileCount = info.FileCount,
+                        IsMultiFile = true
+                    };
+                    Task.Run(() => AddFileToWatch(logInfo));
                 }
             }
 
