@@ -16,11 +16,15 @@ namespace JobManagementApp.Manager
     {
         private readonly Dictionary<string, FileSystemWatcher> _watchers = new Dictionary<string, FileSystemWatcher>();
         private readonly Dictionary<string, FileSystemWatcher> _multiWatchers = new Dictionary<string, FileSystemWatcher>();
-        private readonly Dictionary<string, SemaphoreSlim> _fileSemaphores = new Dictionary<string, SemaphoreSlim>();
+
+        private readonly Dictionary<string, LogInfo> _logInfos = new Dictionary<string, LogInfo>();
+
         private readonly FileCopyProgress _fileCopyProgress = new FileCopyProgress();
         private bool _isStopped = false;
         private string _copyBasePath; // コピー先 フォルダ
         //private readonly string _fileNamePrefix;
+        private readonly List<JobLogItemViewModel> _logs;
+        private readonly DateTime _whereDateTime;
 
         public event Action<string, string, int, int> ProgressChanged;
 
@@ -35,13 +39,12 @@ namespace JobManagementApp.Manager
             public bool IsMultiFile{ get; set; }
         } 
 
-        public MultiFileWatcher(List<JobLogItemViewModel> logs, string copyDirectoryPath)
+        public async Task StartMonitoring()
         {
-            // コピー先フォルダ（元）
-            _copyBasePath = copyDirectoryPath;
+            var tasks = new List<Task>();
 
             // 非同期処理
-            foreach (JobLogItemViewModel log in logs)
+            foreach (JobLogItemViewModel log in _logs)
             {
                 // watcher 受渡用の型にセット
                 var logInfo = new LogInfo
@@ -56,16 +59,43 @@ namespace JobManagementApp.Manager
                 {
                     // 通常用FileWatcherを使用
                     logInfo.IsMultiFile = false;
-                    Task.Run(() => AddFileToWatch(logInfo));
+                    tasks.Add(AddFileToWatch(logInfo));
                 }
                 else
                 {
                     // 複数用FileWatcherを使用
                     logInfo.IsMultiFile = true;
-                    Task.Run(() => AddMultiFileToWatch(logInfo));
+                    tasks.Add(AddMultiFileToWatch(logInfo));
                 }
             }
 
+            // 全てのタスクが完了するまで待機
+            await Task.WhenAll(tasks).ContinueWith(async (x) => {
+
+                if (x.IsCompleted)
+                {
+                    // _watchersの中身に対して並列ダウンロード処理を実行
+                    var downloadTasks = new List<Task>();
+
+                    foreach (var info in _logInfos.Values)
+                    {
+                        downloadTasks.Add(HandleFileCopy(info));
+                    }
+
+                    // ダウンロード処理の完了を待つ
+                    await Task.WhenAll(downloadTasks);
+                }
+            });
+        }
+
+        public MultiFileWatcher(List<JobLogItemViewModel> logs, string copyPath, DateTime whereDateTime)
+        {
+            // 初期値 セット
+            _copyBasePath = copyPath;
+            _logs = logs;
+            _whereDateTime = whereDateTime;
+
+            // 返すイベント
             _fileCopyProgress.ProgressChanged += (fileName, destPath, totalSize, progress) =>
             {
                 if (!_isStopped)
@@ -85,21 +115,21 @@ namespace JobManagementApp.Manager
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
             };
 
-            watcher.Changed += async (sender, e) => await OnChanged(info);
+            watcher.Changed += async (sender, e) => await OnChanged(info).ConfigureAwait(false);
             watcher.EnableRaisingEvents = true;
 
             if (info.IsMultiFile)
             {
                 // 複数用
                 _multiWatchers[info.LogFromPath] = watcher;
+                _logInfos[info.LogFromPath] = info;
             }
             else
             {
                 // 通常用
                 _watchers[info.LogFromPath] = watcher;
+                _logInfos[info.LogFromPath] = info;
             }
-
-            await OnChanged(info);
         }
 
         /// <summary>
@@ -116,12 +146,12 @@ namespace JobManagementApp.Manager
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
             };
 
-            watcher.Changed += async (sender, e) => await OnMultiFileChanged(info);
+            watcher.Changed += async (sender, e) => await OnMultiFileChanged(info).ConfigureAwait(false);
             watcher.EnableRaisingEvents = true;
 
             _watchers[info.LogFromPath] = watcher;
 
-            // 初回は登録
+            // 初回は起動する
             await OnMultiFileChanged(info);
         }
 
@@ -133,33 +163,17 @@ namespace JobManagementApp.Manager
 
             // ① 検知直後のファイル情報 取得
             FileInfo beforeFile = new FileInfo(info.LogFromPath);
-            await Task.Delay(1000); // 1秒待機
+
+            await Task.Delay(2000); // 2秒待機
+
             // ② 検知してから数秒後のファイル情報 取得
             FileInfo afterFile = new FileInfo(info.LogFromPath);
 
             // ①と②のファイル情報を比較して、同じであればジョブ終了とする
             if (beforeFile.Length == afterFile.Length && beforeFile.LastWriteTime == afterFile.LastWriteTime)
             {
-                // コピー先フォルダパスがセットされていない場合、カレントディレクトリをセット
-                if (string.IsNullOrEmpty(_copyBasePath))
-                {
-                    _copyBasePath = AppDomain.CurrentDomain.BaseDirectory;
-                }
-
-                // 日付のコピーフォルダパス 作成
-                var todayCopyPath = Path.Combine(_copyBasePath, DateTime.Now.ToString("yyyyMMdd"));
-                // 機能ID 付与
-                var copyPath = Path.Combine(todayCopyPath, info.JobId);
-                
-                // コピー先フォルダが存在しない場合、フォルダ 作成
-                if (!Directory.Exists(copyPath)) Directory.CreateDirectory(copyPath); 
-
-                // コピー元ファイル
-                string parentFilePath = info.LogFromPath;
-                string copyFilePath = Path.Combine(copyPath, Path.GetFileName(info.LogFromPath));
-
                 // コピー実施
-                await _fileCopyProgress.CopyFile(parentFilePath, copyFilePath);
+                await HandleFileCopy(info);
             }
         }
 
@@ -180,7 +194,8 @@ namespace JobManagementApp.Manager
                         FileCount = info.FileCount,
                         IsMultiFile = true
                     };
-                    Task.Run(() => AddFileToWatch(logInfo));
+                    //Task.Run(() => AddFileToWatch(logInfo));
+                    await AddFileToWatch(logInfo);
                 }
             }
 
@@ -188,8 +203,16 @@ namespace JobManagementApp.Manager
             var filesToRemove = _multiWatchers.Keys.Except(latestFiles.Select(f => f.FullName)).ToList();
             foreach (var filePath in filesToRemove)
             {
-                _multiWatchers[filePath].Dispose();
-                _multiWatchers.Remove(filePath);
+                // 対象としているファイル名 検証
+                var fileName = Path.GetFileName(filePath);
+                if (fileName.Contains(Path.GetFileName(info.LogFromPath)))
+                {
+                    _multiWatchers[filePath].Dispose();
+                    _multiWatchers.Remove(filePath);
+
+                    // LogInfo型の状態も更新
+                    _logInfos.Remove(filePath);
+                }
             }
         }
 
@@ -198,10 +221,35 @@ namespace JobManagementApp.Manager
         {
             var directory = new DirectoryInfo(Path.GetDirectoryName(fullPath));
             return directory.GetFiles()
+                .Where(t => t.LastWriteTime >= _whereDateTime.AddDays(-1))
                 .Where(f => f.Name.Contains(Path.GetFileName(fullPath)))
                 .OrderByDescending(f => f.LastWriteTime)
                 .Take(fileCount)
                 .ToList();
+        }
+
+
+        private async Task HandleFileCopy(LogInfo info)
+        {
+            // コピー先フォルダパスがセットされていない場合、カレントディレクトリをセット
+            if (string.IsNullOrEmpty(_copyBasePath))
+            {
+                _copyBasePath = AppDomain.CurrentDomain.BaseDirectory;
+            }
+
+            // 日付のコピーフォルダパス 作成
+            string todayCopyPath = Path.Combine(_copyBasePath, DateTime.Now.ToString("yyyyMMdd"));
+            string copyPath = Path.Combine(todayCopyPath, info.JobId);
+
+            // コピー先フォルダが存在しない場合、フォルダ 作成
+            if (!Directory.Exists(copyPath)) Directory.CreateDirectory(copyPath);
+
+            // コピー元ファイル
+            string fromFilePath = info.LogFromPath;
+            string toFilePath = Path.Combine(copyPath, Path.GetFileName(info.LogFromPath));
+
+            // コピー実施
+            await _fileCopyProgress.CopyFile(fromFilePath, toFilePath);
         }
 
         public void Dispose()
@@ -215,6 +263,8 @@ namespace JobManagementApp.Manager
             {
                 multiWatchers.Dispose();
             }
+
+            _logInfos.Clear();
         }
     
     }

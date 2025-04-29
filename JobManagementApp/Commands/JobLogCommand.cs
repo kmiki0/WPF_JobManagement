@@ -15,6 +15,7 @@ using JobManagementApp.Manager;
 using JobManagementApp.Helpers;
 using JobManagementApp.BaseClass;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace JobManagementApp.Commands
 {
@@ -212,9 +213,14 @@ namespace JobManagementApp.Commands
         // ==================================
         // 　ログ監視
         // ==================================
-        public void StartMonitoring()
+        public async Task StartMonitoring()
         {
-            using (_multiFileWatcher = new MultiFileWatcher(_vm.Logs.ToList(), _vm.TempSavePath))
+
+            UserFileManager manager = new UserFileManager();
+            var getSearchTime = manager.GetCache(manager.CacheKey_SearchTime);
+            var whereTime = getSearchTime == "" ? DateTime.Now.ToString("yyyy/MM/dd ") + "00:00" : DateTime.Now.ToString("yyyy/MM/dd ") + getSearchTime;
+
+            using (_multiFileWatcher = new MultiFileWatcher(_vm.Logs.ToList(), _vm.TempSavePath, DateTime.Parse(whereTime)))
             {
                 _multiFileWatcher.ProgressChanged += (filePath, destPath, totalSize, percent) => 
                 {
@@ -237,15 +243,14 @@ namespace JobManagementApp.Commands
                         isMultiLog = true;
                     }
 
-                    // マルチログ + logがNullの場合、複数ログありとなるため、新規でlogに追加
+                    // マルチログ + logがNullの場合、新規でlogに追加
                     if (isMultiLog && log is null)
                     {
                         // ファイル名が類似のものを参照して、新しくLogに追加
                         var fileName = Regex.Replace(Path.GetFileName(filePath), @"^\d{14}_?", "");
                         log = _vm.Logs.ToList().Where(x => x.FileName == fileName).FirstOrDefault();
 
-                        var logList = _vm.Logs.ToList();
-                        logList.Add(new JobLogItemViewModel
+                        var newLog = new JobLogItemViewModel
                         {
                             Scenario = log.Scenario,
                             Eda = log.Eda,
@@ -258,9 +263,17 @@ namespace JobManagementApp.Commands
                             Size = totalSize.ToString("N0") + " KB",
                             UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss"),
                             CopyPercent = percent.ToString() + " %",
-                            ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS: emObserverStatus.OBSERVER,
-                        });
+                            ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER,
+                        };
 
+                        // 既にダウンロードが完了している場合、件数取得
+                        if (newLog.ObserverStatus == emObserverStatus.SUCCESS)
+                        {
+                            newLog.LineCount = GetLineCount(destPath, log).ToString() + " 件";
+                        }
+
+                        var logList = _vm.Logs.ToList();
+                        logList.Add(newLog);
 
                         _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
                     }
@@ -284,6 +297,8 @@ namespace JobManagementApp.Commands
                         }
                     }
                 };
+
+                await _multiFileWatcher.StartMonitoring();
             }
         }
 
