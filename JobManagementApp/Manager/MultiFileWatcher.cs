@@ -221,7 +221,7 @@ namespace JobManagementApp.Manager
         {
             var directory = new DirectoryInfo(Path.GetDirectoryName(fullPath));
             return directory.GetFiles()
-                .Where(t => t.LastWriteTime >= _whereDateTime.AddDays(-1))
+                .Where(t => t.LastWriteTime >= _whereDateTime)
                 .Where(f => f.Name.Contains(Path.GetFileName(fullPath)))
                 .OrderByDescending(f => f.LastWriteTime)
                 .Take(fileCount)

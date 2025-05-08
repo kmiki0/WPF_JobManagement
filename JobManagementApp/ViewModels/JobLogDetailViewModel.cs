@@ -4,6 +4,7 @@ using JobManagementApp.Commands;
 using JobManagementApp.Models;
 using System.Windows;
 using System.ComponentModel;
+using System.Linq;
 
 namespace JobManagementApp.ViewModels
 {
@@ -50,6 +51,20 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(SelectedFileType));
             }
         }
+        // 同名ファイル個数
+        public int[] cmbFileCount => Enumerable.Range(1, 10).ToArray(); // MAX10ファイルまでとする。
+        private int _selectedFileCount;
+        public int SelectedFileConut
+        {
+            get { return _selectedFileCount; }
+            set
+            {
+                _selectedFileCount = value;
+                OnPropertyChanged(nameof(SelectedFileConut));
+            }
+        }
+
+
         // 監視タイプ（自動(0)・手動(1)）
         private int _observerType { get; set; }
         public int ObserverType
@@ -89,6 +104,7 @@ namespace JobManagementApp.ViewModels
             this.Scenario = scenario;
             this.Eda = eda;
             this.ObserverType = 0;
+            this.SelectedFileConut = cmbFileCount[0];
 
             // コマンド 初期化
             _command = new JobLogDetailCommand(this, IF);
@@ -101,7 +117,7 @@ namespace JobManagementApp.ViewModels
         }
 
         // 編集の場合
-        public JobLogDetailViewModel(IJobLogDetailModel IF, string scenario, string eda, string fileName, string filePath)
+        public JobLogDetailViewModel(IJobLogDetailModel IF, string scenario, string eda, string fileName, string filePath, int fileCount)
         {
             // 初期値セット
             this.IsButtonEnabled = true;
@@ -109,6 +125,7 @@ namespace JobManagementApp.ViewModels
             this.Eda = eda;
             this.FileName = fileName;
             this.FilePath = filePath;
+            this.SelectedFileConut = fileCount;
 
             // コマンド 初期化
             _command = new JobLogDetailCommand(this, IF);

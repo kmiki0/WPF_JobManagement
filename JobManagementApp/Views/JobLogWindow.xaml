@@ -170,6 +170,7 @@
                                 <Binding Path="Eda" />
                                 <Binding Path="FilePath" />
                                 <Binding Path="FileName" />
+                                <Binding Path="FileCount" />
                             </MultiBinding>
                         </Button.CommandParameter>
                         <Image Source="..\Resources\edit.png"/>

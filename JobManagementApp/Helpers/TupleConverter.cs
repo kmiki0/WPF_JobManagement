@@ -28,7 +28,8 @@ namespace JobManagementApp.Helpers
                     Scenario = values[0].ToString(),
                     Eda = values[1].ToString(),
                     FilePath = values[2].ToString(),
-                    FileName = values[3].ToString()
+                    FileName = values[3].ToString(),
+                    FileCount = int.Parse(values[4].ToString())
                 };
             }
             else

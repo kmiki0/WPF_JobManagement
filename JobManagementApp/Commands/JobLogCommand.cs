@@ -215,7 +215,6 @@ namespace JobManagementApp.Commands
         // ==================================
         public async Task StartMonitoring()
         {
-
             UserFileManager manager = new UserFileManager();
             var getSearchTime = manager.GetCache(manager.CacheKey_SearchTime);
             var whereTime = getSearchTime == "" ? DateTime.Now.ToString("yyyy/MM/dd ") + "00:00" : DateTime.Now.ToString("yyyy/MM/dd ") + getSearchTime;

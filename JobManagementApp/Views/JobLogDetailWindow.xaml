@@ -2,7 +2,7 @@
 <Window x:Class="JobManagementApp.Views.JobLogDetailWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:JobManagementApp.Helpers" xmlns:system="clr-namespace:System;assembly=System.Runtime"
-        Title="JobLogDetailWindow" Height="260" Width="450">
+        Title="JobLogDetailWindow" Height="295" Width="450">
     <Window.Resources>
         <local:FileTypeToJapaneseConverter x:Key="fileTypeToJapaneseConverter"/>
         <local:BoolToRadioButtonConverter x:Key="boolToRadioButtonConverter"/>
@@ -51,7 +51,6 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-
         
         
     </Window.Resources>
@@ -64,6 +63,7 @@
             </Grid.ColumnDefinitions>
 
             <Grid.RowDefinitions>
+                <RowDefinition Height="35" />
                 <RowDefinition Height="35" />
                 <RowDefinition Height="35" />
                 <RowDefinition Height="35" />
@@ -93,9 +93,13 @@
                 </ComboBox.ItemTemplate>
             </ComboBox>
 
+            <!-- 同名ファイル個数 -->
+            <Label Grid.Row="4" Grid.Column="0" Content="同名ファイル個数" />
+            <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding cmbFileCount}" SelectedItem="{Binding SelectedFileConut, Mode=TwoWay}" />
+
             <!-- 監視タイプ -->
-            <Label Grid.Row="4" Grid.Column="0" Content="監視タイプ" />
-            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal">
+            <Label Grid.Row="5" Grid.Column="0" Content="監視タイプ" />
+            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal">
                 <RadioButton Content="自動" Style="{StaticResource RadioStyle}" IsChecked="{Binding ObserverType, Converter={StaticResource boolToRadioButtonConverter}, ConverterParameter=True}" GroupName="Options"/>
                 <RadioButton Content="手動" Style="{StaticResource RadioStyle}" IsChecked="{Binding ObserverType, Converter={StaticResource boolToRadioButtonConverter}, ConverterParameter=False}" GroupName="Options"/>
             </StackPanel>

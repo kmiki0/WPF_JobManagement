@@ -439,6 +439,7 @@ namespace JobManagementApp.Services
                 sql.Append(", FILENAME");
                 sql.Append(", FILEPATH");
                 sql.Append(", FILETYPE");
+                sql.Append(", FILECOUNT");
                 sql.Append(", OBSERVERTYPE");
                 sql.Append(") VALUES (");
                 sql.Append($"  '{job.SCENARIO}'");
@@ -446,6 +447,7 @@ namespace JobManagementApp.Services
                 sql.Append($", '{job.FILENAME}'");
                 sql.Append($", '{job.FILEPATH}'");
                 sql.Append($",  {job.FILETYPE}");
+                sql.Append($",  {job.FILECOUNT}");
                 sql.Append($",  {job.OBSERVERTYPE}");
                 sql.Append(")");
 

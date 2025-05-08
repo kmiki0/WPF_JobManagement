@@ -129,8 +129,10 @@ namespace JobManagementApp.Models
         public string JobId { get; set; }
         // ファイル名
         public string FileName { get; set; }
-        //ファイルパス
+        // ファイルパス
         public string FilePath { get; set; }
+        // 同名ファイル個数
+        public int FileCount { get; set; }
     }
 
 }

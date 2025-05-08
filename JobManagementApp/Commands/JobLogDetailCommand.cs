@@ -160,6 +160,7 @@ namespace JobManagementApp.Commands
                 FILEPATH = _vm.FilePath,
                 OLDFILEPATH = _vm.OldFilePath,
                 FILETYPE = (int)_vm.SelectedFileType,
+                FILECOUNT = _vm.SelectedFileConut,
                 OBSERVERTYPE = _vm.ObserverType,
             };
         }
