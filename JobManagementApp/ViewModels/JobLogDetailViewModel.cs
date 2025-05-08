@@ -52,7 +52,7 @@ namespace JobManagementApp.ViewModels
             }
         }
         // 同名ファイル個数
-        public int[] cmbFileCount => Enumerable.Range(1, 10).ToArray(); // MAX10ファイルまでとする。
+        public int[] cmbFileCount => Enumerable.Range(1, 20).ToArray(); // MAX20ファイルまでとする。
         private int _selectedFileCount;
         public int SelectedFileConut
         {
