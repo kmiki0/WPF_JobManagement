@@ -1,17 +1,16 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Data;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using JobManagementApp.Manager;
+using Microsoft.Extensions.DependencyInjection;
+using JobManagementApp.ViewModels;
 
 namespace JobManagementApp
 {
 
     public partial class App : Application
     {
+        public static IServiceProvider ServiceProvider { get; private set; }
+
         [STAThread]
         public static void Main()
         {
@@ -23,7 +22,13 @@ namespace JobManagementApp
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            StartDB();
+
+            var services = new ServiceCollection();
+            services.AddSingleton<IFileWatcherManager, FileWatcherManager>();
+
+            ServiceProvider = services.BuildServiceProvider();
+
+            StartDB(); // DBセットアップ
         }
 
         private void StartDB()

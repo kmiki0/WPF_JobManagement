@@ -8,6 +8,7 @@ using JobManagementApp.Helpers;
 using JobManagementApp.BaseClass;
 using System.Linq;
 using JobManagementApp.Manager;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace JobManagementApp.Commands
 {
@@ -92,12 +93,14 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void LogWindow_Closed(object sender, EventArgs e)
         {
-            // 
             JobLogWindow jobLogWindow = sender as JobLogWindow;
             if (jobLogWindow != null)
             {
                 JobLogViewModel vm = (JobLogViewModel)jobLogWindow.DataContext;
-                vm._command._multiFileWatcher.Dispose();
+                //vm._command._multiFileWatcher.Dispose();
+                 IFileWatcherManager _fw = App.ServiceProvider.GetRequiredService<IFileWatcherManager>();
+                // ジョブIDに紐づく、ログファイルを監視対象から外す
+                _fw.RemoveAllWhereJobId(vm.Id);
             }
 
             // MainWindow アクティブ

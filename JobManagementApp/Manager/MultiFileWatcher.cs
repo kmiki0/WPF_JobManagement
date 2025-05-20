@@ -1,5 +1,6 @@
 ﻿using JobManagementApp.Models;
 using JobManagementApp.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,32 +13,18 @@ using System.Windows;
 
 namespace JobManagementApp.Manager
 {
-    public class MultiFileWatcher : IDisposable
+    public class MultiFileWatcher
     {
-        private readonly Dictionary<string, FileSystemWatcher> _watchers = new Dictionary<string, FileSystemWatcher>();
-        private readonly Dictionary<string, FileSystemWatcher> _multiWatchers = new Dictionary<string, FileSystemWatcher>();
-
-        private readonly Dictionary<string, LogInfo> _logInfos = new Dictionary<string, LogInfo>();
+        private IFileWatcherManager _fw = App.ServiceProvider.GetRequiredService<IFileWatcherManager>();
 
         private readonly FileCopyProgress _fileCopyProgress = new FileCopyProgress();
+
         private bool _isStopped = false;
         private string _copyBasePath; // コピー先 フォルダ
-        //private readonly string _fileNamePrefix;
         private readonly List<JobLogItemViewModel> _logs;
         private readonly DateTime _whereDateTime;
 
         public event Action<string, string, int, int> ProgressChanged;
-
-
-        private class LogInfo
-        {
-            public string JobId { get; set; }
-            public string LogFromPath { get; set; }
-            public string LogToPath { get; set; }
-            public int FileCount { get; set; }
-            public int FileSize { get; set; }
-            public bool IsMultiFile{ get; set; }
-        } 
 
         public async Task StartMonitoring()
         {
@@ -77,7 +64,7 @@ namespace JobManagementApp.Manager
                     // _watchersの中身に対して並列ダウンロード処理を実行
                     var downloadTasks = new List<Task>();
 
-                    foreach (var info in _logInfos.Values)
+                    foreach (var info in _fw.GetAllLogInfos().Values)
                     {
                         downloadTasks.Add(HandleFileCopy(info));
                     }
@@ -113,22 +100,26 @@ namespace JobManagementApp.Manager
             {
                 Filter = Path.GetFileName(info.LogFromPath),
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+                EnableRaisingEvents = true
             };
 
-            watcher.Changed += async (sender, e) => await OnChanged(info).ConfigureAwait(false);
-            watcher.EnableRaisingEvents = true;
+            watcher.Changed += async (sender, e) => await OnChanged(info);
 
             if (info.IsMultiFile)
             {
                 // 複数用
-                _multiWatchers[info.LogFromPath] = watcher;
-                _logInfos[info.LogFromPath] = info;
+                _fw.AddMultiWatcher(info.LogFromPath, watcher);
+                _fw.AddLogInfo(info.LogFromPath, info);
+                //_multiWatchers[info.LogFromPath] = watcher;
+                //_logInfos[info.LogFromPath] = info;
             }
             else
             {
                 // 通常用
-                _watchers[info.LogFromPath] = watcher;
-                _logInfos[info.LogFromPath] = info;
+                _fw.AddSingleWatcher(info.LogFromPath, watcher);
+                _fw.AddLogInfo(info.LogFromPath, info);
+                //_watchers[info.LogFromPath] = watcher;
+                //_logInfos[info.LogFromPath] = info;
             }
         }
 
@@ -144,12 +135,13 @@ namespace JobManagementApp.Manager
             {
                 Filter = $"*{Path.GetFileName(info.LogFromPath)}",
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+                EnableRaisingEvents = true,
             };
 
             watcher.Changed += async (sender, e) => await OnMultiFileChanged(info).ConfigureAwait(false);
-            watcher.EnableRaisingEvents = true;
 
-            _watchers[info.LogFromPath] = watcher;
+            _fw.AddMultiWatcher(info.LogFromPath, watcher);
+            //_watchers[info.LogFromPath] = watcher;
 
             // 初回は起動する
             await OnMultiFileChanged(info);
@@ -186,7 +178,8 @@ namespace JobManagementApp.Manager
 
             foreach (FileInfo file in latestFiles)
             {
-                if (!_multiWatchers.ContainsKey(file.FullName))
+                //if (!_multiWatchers.ContainsKey(file.FullName))
+                if (_fw.GetMultiWatcher(file.FullName) is null)
                 {
                     var logInfo = new LogInfo{
                         JobId = info.JobId,
@@ -194,26 +187,27 @@ namespace JobManagementApp.Manager
                         FileCount = info.FileCount,
                         IsMultiFile = true
                     };
-                    //Task.Run(() => AddFileToWatch(logInfo));
                     await AddFileToWatch(logInfo);
                 }
             }
 
-            // 古いファイルの監視を解除
-            var filesToRemove = _multiWatchers.Keys.Except(latestFiles.Select(f => f.FullName)).ToList();
-            foreach (var filePath in filesToRemove)
-            {
-                // 対象としているファイル名 検証
-                var fileName = Path.GetFileName(filePath);
-                if (fileName.Contains(Path.GetFileName(info.LogFromPath)))
-                {
-                    _multiWatchers[filePath].Dispose();
-                    _multiWatchers.Remove(filePath);
+            //var filesToRemove = _multiWatchers.Keys.Except(latestFiles.Select(f => f.FullName)).ToList();
+            //foreach (var filePath in filesToRemove)
+            //{
+            //    // 対象としているファイル名 検証
+            //    var fileName = Path.GetFileName(filePath);
+            //    if (fileName.Contains(Path.GetFileName(info.LogFromPath)))
+            //    {
+            //        _multiWatchers[filePath].Dispose();
+            //        _multiWatchers.Remove(filePath);
 
-                    // LogInfo型の状態も更新
-                    _logInfos.Remove(filePath);
-                }
-            }
+            //        // LogInfo型の状態も更新
+            //        _logInfos.Remove(filePath);
+            //    }
+            //}
+
+            //// 古いファイルの監視を解除
+            _fw.RemoveMultiWatcher(latestFiles, info);
         }
 
         // 指定した件数分、ファイル情報を取得
@@ -251,22 +245,5 @@ namespace JobManagementApp.Manager
             // コピー実施
             await _fileCopyProgress.CopyFile(fromFilePath, toFilePath);
         }
-
-        public void Dispose()
-        {
-            foreach (var watcher in _watchers.Values)
-            {
-                watcher.Dispose();
-            }
-
-            foreach (var multiWatchers in _multiWatchers.Values)
-            {
-                multiWatchers.Dispose();
-            }
-
-            _logInfos.Clear();
-        }
-    
     }
-
 }

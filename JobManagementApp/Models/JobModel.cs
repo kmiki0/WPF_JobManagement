@@ -135,4 +135,16 @@ namespace JobManagementApp.Models
         public int FileCount { get; set; }
     }
 
+
+    // FileWatcher用　ログ型
+    public class LogInfo
+    {
+        public string JobId { get; set; }
+        public string LogFromPath { get; set; }
+        public string LogToPath { get; set; }
+        public int FileCount { get; set; }
+        public int FileSize { get; set; }
+        public bool IsMultiFile{ get; set; }
+    } 
+
 }
