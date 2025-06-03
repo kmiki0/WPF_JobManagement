@@ -17,7 +17,7 @@ namespace JobManagementApp.Manager
     {
         private IFileWatcherManager _fw = App.ServiceProvider.GetRequiredService<IFileWatcherManager>();
 
-        private readonly FileCopyProgress _fileCopyProgress = new FileCopyProgress();
+        private FileCopyProgress _fileCopyProgress = new FileCopyProgress();
 
         private bool _isStopped = false;
         private string _copyBasePath; // コピー先 フォルダ
@@ -92,7 +92,6 @@ namespace JobManagementApp.Manager
             };
         }
 
-
         // FileWatcherに登録
         private async Task AddFileToWatch(LogInfo info)
         {
@@ -100,26 +99,24 @@ namespace JobManagementApp.Manager
             {
                 Filter = Path.GetFileName(info.LogFromPath),
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-                EnableRaisingEvents = true
             };
 
             watcher.Changed += async (sender, e) => await OnChanged(info);
+            watcher.EnableRaisingEvents = true;
+
 
             if (info.IsMultiFile)
             {
                 // 複数用
                 _fw.AddMultiWatcher(info.LogFromPath, watcher);
                 _fw.AddLogInfo(info.LogFromPath, info);
-                //_multiWatchers[info.LogFromPath] = watcher;
-                //_logInfos[info.LogFromPath] = info;
+                await HandleFileCopy(info);
             }
             else
             {
                 // 通常用
                 _fw.AddSingleWatcher(info.LogFromPath, watcher);
                 _fw.AddLogInfo(info.LogFromPath, info);
-                //_watchers[info.LogFromPath] = watcher;
-                //_logInfos[info.LogFromPath] = info;
             }
         }
 
@@ -135,38 +132,75 @@ namespace JobManagementApp.Manager
             {
                 Filter = $"*{Path.GetFileName(info.LogFromPath)}",
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-                EnableRaisingEvents = true,
             };
 
-            watcher.Changed += async (sender, e) => await OnMultiFileChanged(info).ConfigureAwait(false);
+            watcher.Changed += async (sender, e) => await OnMultiFileChanged(info);
+            watcher.EnableRaisingEvents = true;
 
-            _fw.AddMultiWatcher(info.LogFromPath, watcher);
-            //_watchers[info.LogFromPath] = watcher;
+            _fw.AddSingleWatcher(info.LogFromPath, watcher);
 
             // 初回は起動する
             await OnMultiFileChanged(info);
         }
 
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
 
-        // ファイルの変更を検知して、数秒後のファイルを比較して変更がなければコピーする
         private async Task OnChanged(LogInfo info)
         {
             if (_isStopped) return;
 
-            // ① 検知直後のファイル情報 取得
-            FileInfo beforeFile = new FileInfo(info.LogFromPath);
+            var key = info.LogFromPath;
+            var semaphore = _fileLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
 
-            await Task.Delay(2000); // 2秒待機
-
-            // ② 検知してから数秒後のファイル情報 取得
-            FileInfo afterFile = new FileInfo(info.LogFromPath);
-
-            // ①と②のファイル情報を比較して、同じであればジョブ終了とする
-            if (beforeFile.Length == afterFile.Length && beforeFile.LastWriteTime == afterFile.LastWriteTime)
+            await semaphore.WaitAsync();// 多重実行防止
+            try
             {
-                // コピー実施
-                await HandleFileCopy(info);
+                // ① 検知直後のファイル情報 取得
+                FileInfo beforeFile = await GetFileInfoWithRetry(info.LogFromPath);
+
+                await Task.Delay(2000); // 2秒待機
+
+                // ② 検知してから数秒後のファイル情報 取得
+                FileInfo afterFile = await GetFileInfoWithRetry(info.LogFromPath);
+
+                // ①と②のファイル情報を比較して、同じであればジョブ終了とする
+                if (beforeFile.Length == afterFile.Length && beforeFile.LastWriteTime == afterFile.LastWriteTime)
+                {
+                    await HandleFileCopy(info);
+                }
             }
+                finally
+            {
+                semaphore.Release();
+
+                // 使用後に辞書から削除（メモリリーク防止）
+                if (semaphore.CurrentCount == 1)
+                {
+                    _fileLocks.TryRemove(key, out _);
+                }
+            }
+        }
+
+        private async Task<FileInfo> GetFileInfoWithRetry(string path, int retryCount = 5, int delayMs = 500)
+        {
+            //for (int i = 0; i < retryCount; i++)
+            //{
+            try
+            {
+                var fileInfo = new FileInfo(path);
+                using (var stream = fileInfo.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    // ファイルが開けたらロックされていないと判断
+                    return fileInfo;
+                }
+            }
+            catch (IOException)
+            {
+                await Task.Delay(delayMs);
+            }
+            //}
+
+            throw new IOException($"ファイル {path} にアクセスできませんでした。");
         }
 
         private async Task OnMultiFileChanged(LogInfo info)
@@ -191,22 +225,7 @@ namespace JobManagementApp.Manager
                 }
             }
 
-            //var filesToRemove = _multiWatchers.Keys.Except(latestFiles.Select(f => f.FullName)).ToList();
-            //foreach (var filePath in filesToRemove)
-            //{
-            //    // 対象としているファイル名 検証
-            //    var fileName = Path.GetFileName(filePath);
-            //    if (fileName.Contains(Path.GetFileName(info.LogFromPath)))
-            //    {
-            //        _multiWatchers[filePath].Dispose();
-            //        _multiWatchers.Remove(filePath);
-
-            //        // LogInfo型の状態も更新
-            //        _logInfos.Remove(filePath);
-            //    }
-            //}
-
-            //// 古いファイルの監視を解除
+            // 古いファイルの監視を解除
             _fw.RemoveMultiWatcher(latestFiles, info);
         }
 
@@ -221,7 +240,6 @@ namespace JobManagementApp.Manager
                 .Take(fileCount)
                 .ToList();
         }
-
 
         private async Task HandleFileCopy(LogInfo info)
         {

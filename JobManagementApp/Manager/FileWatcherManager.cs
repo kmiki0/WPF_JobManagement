@@ -95,26 +95,26 @@ namespace JobManagementApp.Manager
             var keysToRemove = _logInfos.Where(kvp => kvp.Value.JobId == jobId).Select(kvp => kvp.Key).ToList();
 
             foreach (var key in keysToRemove)
-            { 
-                if (key != null)
-                {
-                    // _watchers から削除
-                    if (_watchers.ContainsKey(key))
-                    {
-                        _watchers[key].Dispose(); // リソース解放
-                        _watchers.Remove(key);
-                    }
+            {
+                if (key != null)
+                {
+                    // _watchers から削除
+                    if (_watchers.ContainsKey(key))
+                    {
+                        _watchers[key].Dispose(); // リソース解放
+                        _watchers.Remove(key);
+                    }
 
-                    // _multiWatchers から削除
-                    if (_multiWatchers.ContainsKey(key))
-                    {
-                        _multiWatchers[key].Dispose(); // リソース解放
-                        _multiWatchers.Remove(key);
-                    }
+                    // _multiWatchers から削除
+                    if (_multiWatchers.ContainsKey(key))
+                    {
+                        _multiWatchers[key].Dispose(); // リソース解放
+                        _multiWatchers.Remove(key);
+                    }
 
-                    // _logInfos から削除
-                    _logInfos.Remove(key);
-                }
+                    // _logInfos から削除
+                    _logInfos.Remove(key);
+                }
             }
         }
 

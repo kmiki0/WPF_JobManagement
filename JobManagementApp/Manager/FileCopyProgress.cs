@@ -21,14 +21,11 @@ namespace JobManagementApp.Manager
                 // コピー済みのバイト数
                 long totalBytesCopied = 0;
 
-                //var semaphore = fileSemaphores.GetOrAdd(sourceFilePath, new SemaphoreSlim(1, 1));
-                //await semaphore.WaitAsync();
-
                 // コピー実施する場合
                 if (IsFileCopy(sourceFile, destFile))
                 {
                     using (FileStream sourceStream = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                    using (FileStream destStream = new FileStream(destFile, FileMode.Create, FileAccess.Write, FileShare.None))
+                    using (FileStream destStream = new FileStream(destFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
                     {
                         int bytesRead;
                         while ((bytesRead = await sourceStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
@@ -84,5 +81,9 @@ namespace JobManagementApp.Manager
                 return false;
             }
         }
+        //public void Dispose()
+        //{
+        //    this.Dispose();
+        //}
     }
 }
