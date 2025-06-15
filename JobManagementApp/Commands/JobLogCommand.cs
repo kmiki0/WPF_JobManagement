@@ -216,44 +216,69 @@ namespace JobManagementApp.Commands
         }
 
         // ==================================
-        // 　ログ監視 - 改善版
+        // 　ログ監視 - デバッグ強化版
         // ==================================
         public async Task StartMonitoring()
         {
-            var _multiFileWatcher = new MultiFileWatcher(_vm.Logs.ToList(), _vm.TempSavePath, DateTime.Parse(MainViewModel.Instance.SearchFromDate));
+            try
+            {
+                LogFile.WriteLog("StartMonitoring: 監視を開始します");
+                
+                var _multiFileWatcher = new MultiFileWatcher(_vm.Logs.ToList(), _vm.TempSavePath, DateTime.Parse(MainViewModel.Instance.SearchFromDate));
 
-            // イベント ファイルコピー時
-            _multiFileWatcher.ProgressChanged += OnFileProgressChanged;
+                // イベント ファイルコピー時
+                _multiFileWatcher.ProgressChanged += OnFileProgressChanged;
+                
+                LogFile.WriteLog($"StartMonitoring: ProgressChangedイベントを設定しました");
 
-            // 監視開始
-            await _multiFileWatcher.StartMonitoring();
+                // 監視開始
+                await _multiFileWatcher.StartMonitoring();
+                
+                LogFile.WriteLog("StartMonitoring: 監視開始が完了しました");
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"StartMonitoring エラー: {ex.Message}");
+                throw;
+            }
         }
 
         /// <summary>
-        /// ファイル進行状況変更イベント - 改善版
+        /// ファイル進行状況変更イベント - デバッグ強化版
         /// </summary>
         private void OnFileProgressChanged(string filePath, string destPath, int totalSize, int percent)
         {
             try
             {
+                LogFile.WriteLog($"OnFileProgressChanged: {filePath} - {percent}%");
+                
                 var logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => x.LogFromPath == filePath);
-                if (logInfo == null) return;
+                if (logInfo == null) 
+                {
+                    LogFile.WriteLog($"OnFileProgressChanged: LogInfoが見つかりません - {filePath}");
+                    return;
+                }
+
+                LogFile.WriteLog($"OnFileProgressChanged: LogInfo見つかりました - IsMultiFile: {logInfo.IsMultiFile}");
 
                 var watchingKey = GetWatchingKey(logInfo, filePath);
                 var watchingInfo = _watchingFiles.GetOrAdd(watchingKey, _ => new FileWatchingInfo(logInfo, filePath));
 
                 if (logInfo.IsMultiFile)
                 {
+                    LogFile.WriteLog($"OnFileProgressChanged: マルチファイル処理を開始");
                     HandleMultiFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
                 }
                 else
                 {
+                    LogFile.WriteLog($"OnFileProgressChanged: シングルファイル処理を開始");
                     HandleSingleFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
                 }
             }
             catch (Exception ex)
             {
                 ErrLogFile.WriteLog($"OnFileProgressChanged エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"スタックトレース: {ex.StackTrace}");
             }
         }
 
@@ -262,101 +287,180 @@ namespace JobManagementApp.Commands
         /// </summary>
         private void HandleSingleFileProgress(FileWatchingInfo watchingInfo, string filePath, string destPath, int totalSize, int percent)
         {
-            var templateLog = FindTemplateLog(watchingInfo.OriginalLogInfo);
-            if (templateLog != null)
+            try
             {
-                Application.Current.Dispatcher.Invoke(() =>
+                LogFile.WriteLog($"HandleSingleFileProgress: 開始 - {filePath}");
+                
+                var templateLog = FindTemplateLog(watchingInfo.OriginalLogInfo);
+                if (templateLog != null)
                 {
-                    UpdateLogItemUI(templateLog, filePath, destPath, totalSize, percent);
-                });
+                    LogFile.WriteLog($"HandleSingleFileProgress: テンプレートログ見つかりました - {templateLog.FileName}");
+                    
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        // コピー先フォルダパスを設定
+                        _vm.ToCopyFolderPath = Path.GetDirectoryName(destPath);
+                        
+                        UpdateLogItemUI(templateLog, filePath, destPath, totalSize, percent);
+                        LogFile.WriteLog($"HandleSingleFileProgress: UI更新完了 - {percent}%");
+                    });
+                }
+                else
+                {
+                    LogFile.WriteLog($"HandleSingleFileProgress: テンプレートログが見つかりません");
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"HandleSingleFileProgress エラー: {ex.Message}");
             }
         }
 
         /// <summary>
-        /// マルチファイルの進行状況処理 - 正しい仕様実装
+        /// マルチファイルの進行状況処理 - デバッグ強化版
         /// </summary>
         private void HandleMultiFileProgress(FileWatchingInfo watchingInfo, string filePath, string destPath, int totalSize, int percent)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            try
             {
-                var templateLog = FindTemplateLog(watchingInfo.OriginalLogInfo);
-                if (templateLog == null) return;
-
-                // 実際のファイル名から基本ファイル名を抽出
-                var actualFileName = Path.GetFileName(filePath);
-                var baseFileName = ExtractBaseFileName(actualFileName);
-
-                // このファイルが元のテンプレートファイル名と一致するかチェック
-                if (!baseFileName.Equals(templateLog.FileName, StringComparison.OrdinalIgnoreCase))
-                    return;
-
-                // この実ファイルが既に処理されているかチェック
-                var existingFileLog = FindExistingFileLog(templateLog, actualFileName);
-
-                if (existingFileLog != null)
+                LogFile.WriteLog($"HandleMultiFileProgress: 開始 - {filePath}");
+                
+                Application.Current.Dispatcher.Invoke(() =>
                 {
-                    // 既存エントリを更新
-                    UpdateLogItemUI(existingFileLog, filePath, destPath, totalSize, percent);
+                    // コピー先フォルダパスを設定
+                    _vm.ToCopyFolderPath = Path.GetDirectoryName(destPath);
                     
-                    if (percent >= 100)
+                    var templateLog = FindTemplateLog(watchingInfo.OriginalLogInfo);
+                    if (templateLog == null) 
                     {
-                        existingFileLog.LineCount = GetLineCount(destPath, existingFileLog).ToString() + " 件";
+                        LogFile.WriteLog($"HandleMultiFileProgress: テンプレートログが見つかりません");
+                        return;
                     }
-                }
-                else
-                {
-                    // 新しいファイルの場合
-                    if (IsTemplateNotYetOverwritten(templateLog))
+
+                    LogFile.WriteLog($"HandleMultiFileProgress: テンプレートログ見つかりました - {templateLog.FileName}");
+
+                    // 実際のファイル名から基本ファイル名を抽出
+                    var actualFileName = Path.GetFileName(filePath);
+                    var baseFileName = ExtractBaseFileName(actualFileName);
+
+                    LogFile.WriteLog($"HandleMultiFileProgress: ファイル名 - 実際: {actualFileName}, 基本: {baseFileName}");
+
+                    // このファイルが元のテンプレートファイル名と一致するかチェック
+                    if (!baseFileName.Equals(templateLog.FileName, StringComparison.OrdinalIgnoreCase))
                     {
-                        // 初回検出：テンプレートを実ファイル情報で上書き
-                        OverwriteTemplateWithActualFile(templateLog, filePath, destPath, totalSize, percent);
+                        LogFile.WriteLog($"HandleMultiFileProgress: ファイル名が一致しません - 基本: {baseFileName}, テンプレート: {templateLog.FileName}");
+                        return;
+                    }
+
+                    // この実ファイルが既に処理されているかチェック
+                    var existingFileLog = FindExistingFileLog(templateLog, actualFileName);
+
+                    if (existingFileLog != null)
+                    {
+                        LogFile.WriteLog($"HandleMultiFileProgress: 既存エントリを更新 - {actualFileName}");
+                        // 既存エントリを更新
+                        UpdateLogItemUI(existingFileLog, filePath, destPath, totalSize, percent);
                         
                         if (percent >= 100)
                         {
-                            templateLog.LineCount = GetLineCount(destPath, templateLog).ToString() + " 件";
+                            existingFileLog.LineCount = GetLineCount(destPath, existingFileLog).ToString() + " 件";
                         }
                     }
                     else
                     {
-                        // 2回目以降：新しいエントリを追加
-                        var newFileLog = CreateNewFileLogEntry(templateLog, filePath, destPath, totalSize, percent);
-                        
-                        if (newFileLog.ObserverStatus == emObserverStatus.SUCCESS)
+                        // 新しいファイルの場合
+                        if (IsTemplateNotYetOverwritten(templateLog))
                         {
-                            newFileLog.LineCount = GetLineCount(destPath, newFileLog).ToString() + " 件";
-                        }
-
-                        var logList = _vm.Logs.ToList();
-                        // テンプレートの次に挿入
-                        var templateIndex = logList.IndexOf(templateLog);
-                        if (templateIndex >= 0)
-                        {
-                            logList.Insert(templateIndex + 1, newFileLog);
+                            LogFile.WriteLog($"HandleMultiFileProgress: テンプレートを上書き - {actualFileName}");
+                            // 初回検出：テンプレートを実ファイル情報で上書き
+                            OverwriteTemplateWithActualFile(templateLog, filePath, destPath, totalSize, percent);
+                            
+                            if (percent >= 100)
+                            {
+                                templateLog.LineCount = GetLineCount(destPath, templateLog).ToString() + " 件";
+                            }
                         }
                         else
                         {
-                            logList.Add(newFileLog);
-                        }
-                        
-                        _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
-                    }
-                }
+                            LogFile.WriteLog($"HandleMultiFileProgress: 新しいエントリを追加 - {actualFileName}");
+                            // 2回目以降：新しいエントリを追加
+                            var newFileLog = CreateNewFileLogEntry(templateLog, filePath, destPath, totalSize, percent);
+                            
+                            if (newFileLog.ObserverStatus == emObserverStatus.SUCCESS)
+                            {
+                                newFileLog.LineCount = GetLineCount(destPath, newFileLog).ToString() + " 件";
+                            }
 
-                // 不要になったエントリの削除
-                CleanupObsoleteFileEntries(templateLog);
-            });
+                            var logList = _vm.Logs.ToList();
+                            // テンプレートの次に挿入
+                            var templateIndex = logList.IndexOf(templateLog);
+                            if (templateIndex >= 0)
+                            {
+                                logList.Insert(templateIndex + 1, newFileLog);
+                                LogFile.WriteLog($"HandleMultiFileProgress: テンプレートの次に挿入 (インデックス: {templateIndex + 1})");
+                            }
+                            else
+                            {
+                                logList.Add(newFileLog);
+                                LogFile.WriteLog($"HandleMultiFileProgress: リストの最後に追加");
+                            }
+                            
+                            // ObservableCollectionを更新
+                            _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
+                            LogFile.WriteLog($"HandleMultiFileProgress: ObservableCollection更新完了 (合計: {_vm.Logs.Count}件)");
+                        }
+                    }
+
+                    // 不要になったエントリの削除
+                    CleanupObsoleteFileEntries(templateLog);
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"HandleMultiFileProgress エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"スタックトレース: {ex.StackTrace}");
+            }
         }
 
         /// <summary>
-        /// テンプレートログを検索
+        /// テンプレートログを検索 - デバッグ強化版
         /// </summary>
         private JobLogItemViewModel FindTemplateLog(LogInfo logInfo)
         {
-            var baseFileName = Path.GetFileName(logInfo.LogFromPath);
-            return _vm.Logs.FirstOrDefault(x => 
-                x.FileName == baseFileName && 
-                x.DisplayFileName == baseFileName &&
-                x.FileType != emFileType.LOG); // ログファイル以外がマルチファイル対象
+            try
+            {
+                var baseFileName = Path.GetFileName(logInfo.LogFromPath);
+                LogFile.WriteLog($"FindTemplateLog: 検索中 - baseFileName: {baseFileName}");
+                
+                var candidates = _vm.Logs.Where(x => x.FileName == baseFileName).ToList();
+                LogFile.WriteLog($"FindTemplateLog: 候補件数 - {candidates.Count}件");
+                
+                foreach (var candidate in candidates)
+                {
+                    LogFile.WriteLog($"FindTemplateLog: 候補 - FileName: {candidate.FileName}, DisplayFileName: {candidate.DisplayFileName}, FileType: {candidate.FileType}");
+                }
+                
+                var result = _vm.Logs.FirstOrDefault(x => 
+                    x.FileName == baseFileName && 
+                    x.DisplayFileName == baseFileName &&
+                    x.FileType != emFileType.LOG); // ログファイル以外がマルチファイル対象
+                
+                if (result != null)
+                {
+                    LogFile.WriteLog($"FindTemplateLog: テンプレート見つかりました - {result.FileName}");
+                }
+                else
+                {
+                    LogFile.WriteLog($"FindTemplateLog: テンプレートが見つかりませんでした");
+                }
+                
+                return result;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"FindTemplateLog エラー: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
