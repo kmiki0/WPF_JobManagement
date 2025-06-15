@@ -1,4 +1,5 @@
 ﻿using JobManagementApp.BaseClass;
+using JobManagementApp.Manager;
 using JobManagementApp.Models;
 using JobManagementApp.Services;
 using JobManagementApp.ViewModels;
