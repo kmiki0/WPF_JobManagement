@@ -557,9 +557,9 @@ namespace JobManagementApp.Services
             {
                 var sql = @"
                     INSERT INTO JOB_LINKFILE (
-                        SCENARIO, EDA, FILENAME, FILEPATH, FILETYPE, FILECOUNT, OBSERVERTYPE, INSDT, UPDDT
+                        SCENARIO, EDA, FILENAME, FILEPATH, FILETYPE, FILECOUNT, OBSERVERTYPE
                     ) VALUES (
-                        :scenario, :eda, :filename, :filepath, :filetype, :filecount, :observertype, SYSDATE, SYSDATE
+                        :scenario, :eda, :filename, :filepath, :filetype, :filecount, :observertype
                     )";
 
                 var parameters = new List<(string name, object value)>
