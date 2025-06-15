@@ -108,10 +108,7 @@ namespace JobManagementApp.Services
                 // 最終的なSQLを構築
                 var finalSql = string.Format(sql, sqlParameters.ToArray());
 
-                // デバッグ用ログ出力
-                LogFile.WriteLog($"GetUnyoData SQL: {finalSql}");
-
-                if (!ExecuteDirectQuery(finalSql, ref dt))
+                if (!ExecuteParameterizedQuery(finalSql, new List<(string name, object value)>(), ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
