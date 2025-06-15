@@ -296,11 +296,10 @@ namespace JobManagementApp.Services
                             JM.JOBBOOLEAN = :jobboolean,
                             JM.RECEIVE = :receive,
                             JM.SEND = :send,
-                            JM.MEMO = :memo,
-                            JM.UPDDT = SYSDATE
+                            JM.MEMO = :memo
                     WHEN NOT MATCHED THEN
-                        INSERT (SCENARIO, EDA, ID, NAME, EXECUTION, EXECCOMMNAD, STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO, RRSJFLG, INSDT, UPDDT)
-                        VALUES (:scenario, :eda, :id, :name, :execution, :execcommnad, :status, :beforejob, :jobboolean, :receive, :send, :memo, 0, SYSDATE, SYSDATE)";
+                        INSERT (SCENARIO, EDA, ID, NAME, EXECUTION, EXECCOMMNAD, STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO, RRSJFLG)
+                        VALUES (:scenario, :eda, :id, :name, :execution, :execcommnad, :status, :beforejob, :jobboolean, :receive, :send, :memo, 0)";
 
                 var parameters = new List<(string name, object value)>
                 {
