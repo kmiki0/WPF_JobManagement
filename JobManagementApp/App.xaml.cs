@@ -8,6 +8,8 @@ using JobManagementApp.ViewModels;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime;
+using System.Runtime.InteropServices;
 
 namespace JobManagementApp
 {
@@ -250,10 +252,6 @@ namespace JobManagementApp
             {
                 LogCriticalError($"Task未処理例外: {e.Exception?.Message}");
                 
-                foreach (var innerEx in e.Exception?.InnerExceptions ?? new Exception[0])
-                {
-                    LogCriticalError($"内部例外: {innerEx.Message}");
-                }
 
                 e.SetObserved(); // 例外を観測済みとしてマーク
                 _handledExceptions++;
@@ -610,7 +608,7 @@ namespace JobManagementApp
         /// <summary>
         /// 致命的例外の処理
         /// </summary>
-        private void HandleCriticalException(Exception exception, string context)
+        private static void HandleCriticalException(Exception exception, string context)
         {
             try
             {
@@ -640,7 +638,7 @@ namespace JobManagementApp
         /// <summary>
         /// 致命的エラーダイアログの表示
         /// </summary>
-        private void ShowCriticalErrorDialog(Exception exception, string context = null)
+        private static void ShowCriticalErrorDialog(Exception exception, string context = null)
         {
             try
             {
