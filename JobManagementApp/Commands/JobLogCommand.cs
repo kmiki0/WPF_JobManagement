@@ -29,10 +29,14 @@ namespace JobManagementApp.Commands
         private readonly JobLogViewModel _vm;
         private readonly IJobLogModel _if;
         
+        // ファイル監視状態を管理するためのコレクション
+        private readonly ConcurrentDictionary<string, FileWatchingInfo> _watchingFiles;
+        
         public JobLogCommand(JobLogViewModel VM, IJobLogModel IF)
         {
             _vm = VM;
             _if = IF;
+            _watchingFiles = new ConcurrentDictionary<string, FileWatchingInfo>();
 
             Init();
         }
@@ -93,7 +97,6 @@ namespace JobManagementApp.Commands
                 StartMonitoring();
             });
         }
-
 
         /// <summary> 
         /// vmのジョブIDに値セット
@@ -156,6 +159,7 @@ namespace JobManagementApp.Commands
             logDetailWindow.DataContext = vm;
             logDetailWindow.ShowDialog();
         }
+        
         /// <summary> 
         /// ログ編集ウィンドウ Closeイベント
         /// </summary> 
@@ -164,7 +168,6 @@ namespace JobManagementApp.Commands
             // MainViewModelに通知するための処理を追加
             JobLogViewModel.RecreateViewModel(e);
         }
-
 
         /// <summary> 
         /// ファイルを開くボタン クリック処理
@@ -180,8 +183,8 @@ namespace JobManagementApp.Commands
                 path = Path.Combine(path, _vm.Id); 
             }
 
-            // フォルダが存在しない場合は作成
-            if (!Directory.Exists(path))
+            // フォルダが存在しない場合は作成
+            if (!Directory.Exists(path))
             {
                 Directory.CreateDirectory(path);
             }
@@ -212,246 +215,329 @@ namespace JobManagementApp.Commands
             }
         }
 
-
         // ==================================
-        // 　ログ監視
+        // 　ログ監視 - 改善版
         // ==================================
         public async Task StartMonitoring()
         {
             var _multiFileWatcher = new MultiFileWatcher(_vm.Logs.ToList(), _vm.TempSavePath, DateTime.Parse(MainViewModel.Instance.SearchFromDate));
 
             // イベント ファイルコピー時
-            _multiFileWatcher.ProgressChanged += (filePath, destPath, totalSize, percent) => 
-            {
-                var logInfo = _fw.GetAllLogInfos().Values.Where(x => x.LogFromPath == filePath).FirstOrDefault();
-                // Watcher対象ということを前提
-                if (logInfo != null)
-                {
-                    // Normalログのパターン
-                    if (logInfo.IsMultiFile == false)
-                    {
-                        var log = _vm.Logs.ToList().Where(x => Path.Combine(x.FilePath, x.DisplayFileName) == filePath).FirstOrDefault();
-                        if (log != null)
-                        {
-                            // 画面更新
-                            UpdateUIToWatcher(filePath, destPath, totalSize, percent, log);
-                        }
-                    }
-                    // 複数あるファイル
-                    else
-                    {
-                        // 画面にあることを確認
-                        var log = _vm.Logs.ToList().Where(x => Path.Combine(x.FilePath, x.DisplayFileName) == filePath).FirstOrDefault();
-
-                        // 画面にある場合、値を更新
-                        if (log != null)
-                        {
-                            // ダウンロード完了したら、行数カウント
-                            if (UpdateUIToWatcher(filePath, destPath, totalSize, percent, log) == emObserverStatus.SUCCESS)
-                            {
-                                log.LineCount = GetLineCount(destPath, log).ToString() + " 件";
-                            }
-                        }
-                        // 画面にない場合
-                        else
-                        {
-                            // 正規表現で日付部分とその後のアンダーバーを取り除く
-                            var fileName = Regex.Replace(Path.GetFileName(filePath), @"^\d{14}_?", "");
-                            var multiLog = _vm.Logs.ToList().Where(x => x.FileName == fileName && x.DisplayFileName == x.FileName).FirstOrDefault();
-
-                            // 元となるファイル名がある場合
-                            if (multiLog != null)
-                            {
-                                // その項目を更新する
-                                if (UpdateUIToWatcher(filePath, destPath, totalSize, percent, multiLog) == emObserverStatus.SUCCESS)
-                                {
-                                    multiLog.LineCount = GetLineCount(destPath, log).ToString() + " 件";
-                                }
-                            }
-                            else
-                            {
-
-                                var newLogInfo = _vm.Logs.ToList().Where(x => x.FileName == fileName).FirstOrDefault();
-
-                                if (newLogInfo != null)
-                                {
-                                    // 新規で項目を追加する
-                                    var newLog = new JobLogItemViewModel
-                                    {
-                                        Scenario = newLogInfo.Scenario,
-                                        Eda = newLogInfo.Eda,
-                                        FilePath = filePath,
-                                        FileName = Path.GetFileName(filePath),
-                                        DisplayFileName = Path.GetFileName(filePath),
-                                        FileType = newLogInfo.FileType,
-                                        FileCount = newLogInfo.FileCount,
-                                        ObserverType = newLogInfo.ObserverType,
-                                        Size = totalSize.ToString("N0") + " KB",
-                                        UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss"),
-                                        CopyPercent = percent.ToString() + " %",
-                                        ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER,
-                                    };
-                                    // ダウンロード完了してたら、行数カウント
-                                    if (newLog.ObserverStatus == emObserverStatus.SUCCESS)
-                                    {
-                                        newLog.LineCount = GetLineCount(destPath, newLog).ToString() + " 件";
-                                    }
-
-                                    // Logsに追加
-                                    var updateLogList = _vm.Logs.ToList();
-                                    updateLogList.Add(newLog);
-                                    _vm.Logs = new ObservableCollection<JobLogItemViewModel>(updateLogList);
-
-                                    // 画面にあって、multiWatcherにないものを削除する
-                                    RemoveUINotInWatcher();
-                                }
-                            }
-                        }
-                    }
-                }
-
-                //bool isMultiLog = false;
-
-                //_vm.ToCopyFolderPath = Path.GetDirectoryName(destPath);
-
-                //// 進行状況を画面に表示するコード
-                //var log = _vm.Logs.ToList().Where(x => Path.Combine(x.FilePath, x.DisplayFileName) == filePath).FirstOrDefault();
-
-                //// csv, tsvの場合は、先頭の日付を抜いて検索
-                //if (log is null)
-                //{
-                //    // 正規表現で日付部分とその後のアンダーバーを取り除く
-                //    var fileName = Regex.Replace(Path.GetFileName(filePath), @"^\d{14}_?", "");
-                //    // 初回のみ、ここであたる
-                //    log = _vm.Logs.ToList().Where(x => x.FileName == fileName && x.DisplayFileName == x.FileName).FirstOrDefault();
-                //    // マルチログ対応
-                //    isMultiLog = true;
-                //}
-
-                //// マルチログ + logがNullの場合、新規でlogに追加
-                //if (isMultiLog && log is null)
-                //{
-                //    // ファイル名が類似のものを参照して、新しくLogに追加
-                //    var fileName = Regex.Replace(Path.GetFileName(filePath), @"^\d{14}_?", "");
-                //    log = _vm.Logs.ToList().Where(x => x.FileName == fileName).FirstOrDefault();
-
-                //    var newLog = new JobLogItemViewModel
-                //    {
-                //        Scenario = log.Scenario,
-                //        Eda = log.Eda,
-                //        FilePath = log.FilePath,
-                //        FileName = log.FileName,
-                //        DisplayFileName = Path.GetFileName(filePath),
-                //        FileType = log.FileType,
-                //        FileCount = log.FileCount,
-                //        ObserverType = log.ObserverType,
-                //        Size = totalSize.ToString("N0") + " KB",
-                //        UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss"),
-                //        CopyPercent = percent.ToString() + " %",
-                //        ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER,
-                //    };
-
-                //    // 既にダウンロードが完了している場合、件数取得
-                //    if (newLog.ObserverStatus == emObserverStatus.SUCCESS)
-                //    {
-                //        newLog.LineCount = GetLineCount(destPath, log).ToString() + " 件";
-                //    }
-
-                //    var logList = _vm.Logs.ToList();
-                //    logList.Add(newLog);
-
-                //    _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
-                //}
-                //// logがある場合、画面値 更新
-                //else if (log != null)
-                //{
-                //    log.DisplayFileName = Path.GetFileName(filePath);
-                //    log.Size = totalSize.ToString("N0") + " KB";
-                //    log.CopyPercent = percent.ToString() + " %";
-                //    log.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
-
-                //    if (percent >= 100)
-                //    {
-                //        log.ObserverStatus = emObserverStatus.SUCCESS;
-
-                //        // 100% 取り込めたら Recv, Sendファイルの場合、行数カウント
-                //        if (log.FileType == emFileType.RECEIVE || log.FileType == emFileType.SEND)
-                //        {
-                //            log.LineCount = GetLineCount(destPath, log).ToString() + " 件";
-                //        }
-                //    }
-                //    else
-                //    {
-                //        log.ObserverStatus = emObserverStatus.OBSERVER;
-                //    }
-                //}
-            };
+            _multiFileWatcher.ProgressChanged += OnFileProgressChanged;
 
             // 監視開始
             await _multiFileWatcher.StartMonitoring();
         }
-        // Watcherを元に画面要素を更新
-        private emObserverStatus UpdateUIToWatcher(string filePath, string destPath, int totalSize, int percent, JobLogItemViewModel log)
+
+        /// <summary>
+        /// ファイル進行状況変更イベント - 改善版
+        /// </summary>
+        private void OnFileProgressChanged(string filePath, string destPath, int totalSize, int percent)
         {
-
-            // ダウンロード率によって、状態を変化させる
-            if (percent < 100)
+            try
             {
-                log.ObserverStatus = emObserverStatus.OBSERVER;
-            }
-            else
-            {
-                log.ObserverStatus = emObserverStatus.SUCCESS;
+                var logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => x.LogFromPath == filePath);
+                if (logInfo == null) return;
 
-            }
+                var watchingKey = GetWatchingKey(logInfo, filePath);
+                var watchingInfo = _watchingFiles.GetOrAdd(watchingKey, _ => new FileWatchingInfo(logInfo, filePath));
 
-            log.DisplayFileName = Path.GetFileName(filePath);
-            log.Size = totalSize.ToString("N0") + " KB";
-            log.CopyPercent = percent.ToString() + " %";
-            log.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
-
-            return log.ObserverStatus;
-        }
-        // Watcherになくて、画面にあるものを削除
-        private void RemoveUINotInWatcher()
-        {
-            var watchers = _fw.GetAllMultiWatchers();
-            var watcherKeys = watchers.Keys.ToHashSet();
-
-            // 削除対象のログを抽出
-            var logsToRemove = _vm.Logs
-                .Where(x => (x.FileType == emFileType.RECEIVE || x.FileType == emFileType.SEND))
-                .Where(x =>
+                if (logInfo.IsMultiFile)
                 {
-                    var fullPath = Path.Combine(x.FilePath, x.DisplayFileName);
-                    return watcherKeys.Contains(fullPath);
-                })
-                .ToList();
-
-            // ログの削除
-            foreach (var delLog in logsToRemove)
+                    HandleMultiFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
+                }
+                else
+                {
+                    HandleSingleFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
+                }
+            }
+            catch (Exception ex)
             {
-                var deleteLogList = _vm.Logs.ToList();
-                deleteLogList.Remove(delLog);
-                _vm.Logs = new ObservableCollection<JobLogItemViewModel>(deleteLogList);
+                ErrLogFile.WriteLog($"OnFileProgressChanged エラー: {ex.Message}");
             }
         }
 
+        /// <summary>
+        /// シングルファイルの進行状況処理
+        /// </summary>
+        private void HandleSingleFileProgress(FileWatchingInfo watchingInfo, string filePath, string destPath, int totalSize, int percent)
+        {
+            var templateLog = FindTemplateLog(watchingInfo.OriginalLogInfo);
+            if (templateLog != null)
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    UpdateLogItemUI(templateLog, filePath, destPath, totalSize, percent);
+                });
+            }
+        }
+
+        /// <summary>
+        /// マルチファイルの進行状況処理 - 正しい仕様実装
+        /// </summary>
+        private void HandleMultiFileProgress(FileWatchingInfo watchingInfo, string filePath, string destPath, int totalSize, int percent)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var templateLog = FindTemplateLog(watchingInfo.OriginalLogInfo);
+                if (templateLog == null) return;
+
+                // 実際のファイル名から基本ファイル名を抽出
+                var actualFileName = Path.GetFileName(filePath);
+                var baseFileName = ExtractBaseFileName(actualFileName);
+
+                // このファイルが元のテンプレートファイル名と一致するかチェック
+                if (!baseFileName.Equals(templateLog.FileName, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                // この実ファイルが既に処理されているかチェック
+                var existingFileLog = FindExistingFileLog(templateLog, actualFileName);
+
+                if (existingFileLog != null)
+                {
+                    // 既存エントリを更新
+                    UpdateLogItemUI(existingFileLog, filePath, destPath, totalSize, percent);
+                    
+                    if (percent >= 100)
+                    {
+                        existingFileLog.LineCount = GetLineCount(destPath, existingFileLog).ToString() + " 件";
+                    }
+                }
+                else
+                {
+                    // 新しいファイルの場合
+                    if (IsTemplateNotYetOverwritten(templateLog))
+                    {
+                        // 初回検出：テンプレートを実ファイル情報で上書き
+                        OverwriteTemplateWithActualFile(templateLog, filePath, destPath, totalSize, percent);
+                        
+                        if (percent >= 100)
+                        {
+                            templateLog.LineCount = GetLineCount(destPath, templateLog).ToString() + " 件";
+                        }
+                    }
+                    else
+                    {
+                        // 2回目以降：新しいエントリを追加
+                        var newFileLog = CreateNewFileLogEntry(templateLog, filePath, destPath, totalSize, percent);
+                        
+                        if (newFileLog.ObserverStatus == emObserverStatus.SUCCESS)
+                        {
+                            newFileLog.LineCount = GetLineCount(destPath, newFileLog).ToString() + " 件";
+                        }
+
+                        var logList = _vm.Logs.ToList();
+                        // テンプレートの次に挿入
+                        var templateIndex = logList.IndexOf(templateLog);
+                        if (templateIndex >= 0)
+                        {
+                            logList.Insert(templateIndex + 1, newFileLog);
+                        }
+                        else
+                        {
+                            logList.Add(newFileLog);
+                        }
+                        
+                        _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
+                    }
+                }
+
+                // 不要になったエントリの削除
+                CleanupObsoleteFileEntries(templateLog);
+            });
+        }
+
+        /// <summary>
+        /// テンプレートログを検索
+        /// </summary>
+        private JobLogItemViewModel FindTemplateLog(LogInfo logInfo)
+        {
+            var baseFileName = Path.GetFileName(logInfo.LogFromPath);
+            return _vm.Logs.FirstOrDefault(x => 
+                x.FileName == baseFileName && 
+                x.DisplayFileName == baseFileName &&
+                x.FileType != emFileType.LOG); // ログファイル以外がマルチファイル対象
+        }
+
+        /// <summary>
+        /// 既存のファイルログエントリを検索（テンプレートが実ファイル化されている場合も含む）
+        /// </summary>
+        private JobLogItemViewModel FindExistingFileLog(JobLogItemViewModel templateLog, string actualFileName)
+        {
+            // テンプレート自体が既にこの実ファイル名になっている場合
+            if (templateLog.DisplayFileName == actualFileName)
+            {
+                return templateLog;
+            }
+
+            // テンプレート以外で同じ実ファイル名のエントリを検索
+            return _vm.Logs.FirstOrDefault(x => 
+                x.FileName == templateLog.FileName && 
+                x.DisplayFileName == actualFileName &&
+                x != templateLog);
+        }
+
+        /// <summary>
+        /// テンプレートがまだ実ファイルで上書きされていないかチェック
+        /// </summary>
+        private bool IsTemplateNotYetOverwritten(JobLogItemViewModel templateLog)
+        {
+            // DisplayFileNameとFileNameが同じ場合は、まだテンプレート状態
+            return templateLog.DisplayFileName == templateLog.FileName;
+        }
+
+        /// <summary>
+        /// テンプレートを実ファイル情報で上書き
+        /// </summary>
+        private void OverwriteTemplateWithActualFile(JobLogItemViewModel templateLog, string filePath, string destPath, int totalSize, int percent)
+        {
+            var actualFileName = Path.GetFileName(filePath);
+            
+            // テンプレートの基本情報は保持し、実ファイル固有の情報のみ更新
+            templateLog.DisplayFileName = actualFileName;
+            templateLog.Size = totalSize.ToString("N0") + " KB";
+            templateLog.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
+            templateLog.CopyPercent = percent.ToString() + " %";
+            templateLog.ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER;
+        }
+
+        /// <summary>
+        /// 新しいファイルログエントリを作成
+        /// </summary>
+        private JobLogItemViewModel CreateNewFileLogEntry(JobLogItemViewModel templateLog, string filePath, string destPath, int totalSize, int percent)
+        {
+            var actualFileName = Path.GetFileName(filePath);
+            
+            return new JobLogItemViewModel
+            {
+                Scenario = templateLog.Scenario,
+                Eda = templateLog.Eda,
+                Id = templateLog.Id,
+                FilePath = templateLog.FilePath, // 元のパスを保持
+                FileName = templateLog.FileName, // 元のファイル名を保持
+                DisplayFileName = actualFileName, // 実際のファイル名を表示
+                FileType = templateLog.FileType,
+                FileCount = templateLog.FileCount,
+                ObserverType = templateLog.ObserverType,
+                Size = totalSize.ToString("N0") + " KB",
+                UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss"),
+                CopyPercent = percent.ToString() + " %",
+                ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER,
+            };
+        }
+
+        /// <summary>
+        /// ログアイテムUIを更新（シンプル版）
+        /// </summary>
+        private void UpdateLogItemUI(JobLogItemViewModel logItem, string filePath, string destPath, int totalSize, int percent)
+        {
+            if (logItem == null) return;
+
+            // 基本的な情報を更新（DisplayFileNameは変更しない）
+            logItem.Size = totalSize.ToString("N0") + " KB";
+            logItem.CopyPercent = percent.ToString() + " %";
+            logItem.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
+            logItem.ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER;
+        }
+
+        /// <summary>
+        /// 基本ファイル名を抽出（日付プレフィックスを除去）
+        /// </summary>
+        private string ExtractBaseFileName(string fileName)
+        {
+            // yyyymmddhhmmss_ファイル名.拡張子 から ファイル名.拡張子 を抽出
+            var match = Regex.Match(fileName, @"^\d{14}_?(.+)$");
+            return match.Success ? match.Groups[1].Value : fileName;
+        }
+
+        /// <summary>
+        /// 監視キーを生成
+        /// </summary>
+        private string GetWatchingKey(LogInfo logInfo, string filePath)
+        {
+            return $"{logInfo.JobId}_{Path.GetFileName(logInfo.LogFromPath)}_{Path.GetFileName(filePath)}";
+        }
+
+        /// <summary>
+        /// 廃止されたファイルエントリをクリーンアップ
+        /// </summary>
+        private void CleanupObsoleteFileEntries(JobLogItemViewModel templateLog)
+        {
+            try
+            {
+                var currentWatchers = _fw.GetAllMultiWatchers().Keys.ToHashSet();
+                
+                // テンプレートと同じFileNameを持つエントリで、現在監視されていないものを削除
+                var logsToRemove = _vm.Logs
+                    .Where(x => x.FileName == templateLog.FileName && 
+                               x.DisplayFileName != x.FileName && // テンプレート状態ではない
+                               !currentWatchers.Contains(Path.Combine(x.FilePath, x.DisplayFileName)))
+                    .ToList();
+
+                if (logsToRemove.Any())
+                {
+                    var logList = _vm.Logs.ToList();
+                    foreach (var logToRemove in logsToRemove)
+                    {
+                        logList.Remove(logToRemove);
+                    }
+                    _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
+                    
+                    LogFile.WriteLog($"廃止されたファイルエントリ {logsToRemove.Count} 件を削除しました");
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"CleanupObsoleteFileEntries エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// ファイルの行数を取得
+        /// </summary>
         private int GetLineCount(string filePath, JobLogItemViewModel log)
         {
             int lineCount = 0;
 
-            // 一時ファイルにコピーして行数をカウント
-            string tempFilePath = Path.GetTempFileName();
-            File.Copy(filePath, tempFilePath, true);
+            try
+            {
+                // 一時ファイルにコピーして行数をカウント
+                string tempFilePath = Path.GetTempFileName();
+                File.Copy(filePath, tempFilePath, true);
 
-            // 行数をカウント
-            lineCount = File.ReadLines(tempFilePath).Count();
+                // 行数をカウント
+                lineCount = File.ReadLines(tempFilePath).Count();
 
-            // 一時ファイルを削除
-            File.Delete(tempFilePath);
+                // 一時ファイルを削除
+                File.Delete(tempFilePath);
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"GetLineCount エラー: {ex.Message}");
+            }
 
             return lineCount;
         }
+
+        #region 内部クラス
+
+        /// <summary>
+        /// ファイル監視情報を管理するクラス
+        /// </summary>
+        private class FileWatchingInfo
+        {
+            public LogInfo OriginalLogInfo { get; }
+            public string ActualFilePath { get; }
+            public DateTime StartTime { get; }
+
+            public FileWatchingInfo(LogInfo originalLogInfo, string actualFilePath)
+            {
+                OriginalLogInfo = originalLogInfo;
+                ActualFilePath = actualFilePath;
+                StartTime = DateTime.Now;
+            }
+        }
+
+        #endregion
     }
 }
