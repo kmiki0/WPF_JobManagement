@@ -9,325 +9,410 @@ using JobManagementApp.Models;
 
 namespace JobManagementApp.Services
 {
+    /// <summary>
+    /// SQLまとめ
+    /// </summary>
     public static class JobService
     {
         #region 運用処理管理R
+
         /// <summary> 
         /// シナリオと枝番から、運用処理管理Rの情報取得
         /// </summary> 
         public static DataTable GetUnyoData(List<JobUnyoCtlModel> args, string fromDate, string toDate)
         {
             DataTable dt = new DataTable();
-            StringBuilder sql = new StringBuilder();
 
-            // 検索項目　ない場合、空を返す
-            if (args.Count <= 0) return new DataTable();
+            // 入力検証
+            if (args == null || args.Count <= 0) 
+            {
+                ErrLogFile.WriteLog("GetUnyoData: 引数が無効です");
+                return new DataTable();
+            }
+
+            if (string.IsNullOrWhiteSpace(fromDate) || string.IsNullOrWhiteSpace(toDate))
+            {
+                ErrLogFile.WriteLog("GetUnyoData: 日付パラメータが無効です");
+                return new DataTable();
+            }
+
+            // 日付フォーマット検証
+            if (!IsValidDateFormat(fromDate) || !IsValidDateFormat(toDate))
+            {
+                ErrLogFile.WriteLog("GetUnyoData: 日付フォーマットが無効です");
+                return new DataTable();
+            }
 
             try
             {
-                // SQL作成
-                // シナリオと枝番からジョブIDを取得し、更新日付が一番新しいものを取得
-                sql.Append(" with JOBID_UPDDT as ( ");
-                sql.Append("     select");
-                sql.Append("         UNYO.JOBID");
-                sql.Append("         , MAX(UNYO.UPDDT) as UPDDT ");
-                sql.Append("         , JOB_M.SCENARIO ");
-                sql.Append("         , JOB_M.EDA ");
-                sql.Append("     from");
-                sql.Append("         L1_UNYOCTL UNYO ");
-                sql.Append("         left join JOB_MANEGMENT JOB_M ");
-                sql.Append("             on UNYO.JOBID = JOB_M.ID ");
-                sql.Append("     where");
-                // 日付で範囲指定
-                sql.Append($"         UNYO.UPDDT between to_date('{fromDate}', 'YYYY/MM/DD HH24:MI') AND TO_DATE('{toDate}', 'YYYY/MM/DD HH24:MI')");
-                // リストにあるものをすべて条件に追加
-                bool isFirst = true;
-                foreach (var arg in args)
+                var sql = @"
+                    WITH JOBID_UPDDT AS (
+                        SELECT 
+                            UNYO.JOBID,
+                            MAX(UNYO.UPDDT) AS UPDDT,
+                            JOB_M.SCENARIO,
+                            JOB_M.EDA
+                        FROM L1_UNYOCTL UNYO 
+                        LEFT JOIN JOB_MANEGMENT JOB_M ON UNYO.JOBID = JOB_M.ID 
+                        WHERE UNYO.UPDDT BETWEEN TO_DATE(:fromDate, 'YYYY/MM/DD HH24:MI') 
+                                             AND TO_DATE(:toDate, 'YYYY/MM/DD HH24:MI')
+                        AND (";
+
+                var conditionParts = new List<string>();
+                var parameters = new List<(string name, object value)>
                 {
-                    if (isFirst)
+                    ("fromDate", fromDate),
+                    ("toDate", toDate)
+                };
+
+                for (int i = 0; i < args.Count; i++)
+                {
+                    var scenario = args[i].Scenario?.Trim() ?? "";
+                    var eda = args[i].Eda?.Trim() ?? "";
+                    
+                    // 入力検証
+                    if (!IsValidScenario(scenario) || !IsValidEda(eda))
                     {
-                        isFirst = false;
-                        sql.Append($"        and ( ");
+                        ErrLogFile.WriteLog($"GetUnyoData: 無効なシナリオまたは枝番 - {scenario}/{eda}");
+                        continue;
                     }
-                    else
-                    {
-                        sql.Append($"        or ");
-                    }
-                    sql.Append($"        (JOB_M.SCENARIO = '{arg.Scenario}' and JOB_M.EDA = {arg.Eda}) ");
+
+                    var scenarioParam = $"scenario{i}";
+                    var edaParam = $"eda{i}";
+                    
+                    conditionParts.Add($"(JOB_M.SCENARIO = :{scenarioParam} AND JOB_M.EDA = :{edaParam})");
+                    parameters.Add((scenarioParam, scenario));
+                    parameters.Add((edaParam, eda));
                 }
-                sql.Append($"        ) ");
-                sql.Append("     group by");
-                sql.Append("         UNYO.JOBID");
-                sql.Append("       , JOB_M.SCENARIO ");
-                sql.Append("       , JOB_M.EDA ");
-                sql.Append(" ) ");
 
-                // 上で取得した更新日付を元に運用処理管理Rを検索
-                sql.Append(" select");
-                sql.Append("     UNYO.JOBID");
-                sql.Append("     , UNYO.SYRFLG");
-                sql.Append("     , UNYO.UPDDT ");
-                sql.Append("     , JU.SCENARIO ");
-                sql.Append("     , JU.EDA ");
-                sql.Append(" from");
-                sql.Append("     L1_UNYOCTL UNYO ");
-                sql.Append("     inner join JOBID_UPDDT JU ");
-                sql.Append("         on UNYO.JOBID = JU.JOBID ");
-                sql.Append("         and UNYO.UPDDT = JU.UPDDT");
+                if (conditionParts.Count == 0)
+                {
+                    ErrLogFile.WriteLog("GetUnyoData: 有効な検索条件がありません");
+                    return new DataTable();
+                }
 
-                // SQL実行
-                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
-                if (pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                sql += string.Join(" OR ", conditionParts);
+                sql += @")
+                        GROUP BY UNYO.JOBID, JOB_M.SCENARIO, JOB_M.EDA
+                    )
+                    SELECT 
+                        UNYO.JOBID,
+                        UNYO.SYRFLG,
+                        TO_CHAR(UNYO.UPDDT, 'YYYY/MM/DD HH24:MI:SS') AS UPDDT,
+                        JU.SCENARIO,
+                        JU.EDA
+                    FROM L1_UNYOCTL UNYO 
+                    INNER JOIN JOBID_UPDDT JU ON UNYO.JOBID = JU.JOBID 
+                                             AND UNYO.UPDDT = JU.UPDDT";
+
+                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
+
+                LogFile.WriteLog($"GetUnyoData: {dt.Rows.Count}件のデータを取得しました");
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                ErrLogFile.WriteLog($"GetUnyoData エラー: {e.Message}");
+                throw new Exception($"運用処理管理Rデータ取得エラー: {e.Message}");
             }
 
             return dt;
         }
 
-        /// <summary> 
+        /// <summary>
         /// ジョブ管理からJOBIDを取得し、運用処理管理RのSEQが大きいもので更新
-        /// </summary> 
+        /// </summary>
         public static bool UpdateUnyoCtrl(string scenario, string eda)
         {
-            StringBuilder sql = new StringBuilder();
+            // 入力検証
+            if (!IsValidScenario(scenario) || !IsValidEda(eda))
+            {
+                ErrLogFile.WriteLog($"UpdateUnyoCtrl: 無効なパラメータ - {scenario}/{eda}");
+                return false;
+            }
 
             try
             {
-                // SQL作成
-                sql.Append(" UPDATE L1_UNYOCTL");
-                sql.Append(" SET SYRFLG = 0,");
-                sql.Append("     UPDDT = SYSDATE");
-                sql.Append(" WHERE SEQ = (");
-                sql.Append("     SELECT MAX(UNYO.SEQ)");
-                sql.Append("     FROM L1_UNYOCTL UNYO");
-                sql.Append("     JOIN JOB_MANEGMENT JOB_M");
-                sql.Append("         ON UNYO.JOBID = JOB_M.ID");
-                sql.Append($"    WHERE JOB_M.SCENARIO = '{scenario}'");
-                sql.Append($"    AND JOB_M.EDA = {eda}");
-                sql.Append(" )");
+                var sql = @"
+                    UPDATE L1_UNYOCTL
+                    SET SYRFLG = 0,
+                        UPDDT = SYSDATE
+                    WHERE SEQ = (
+                        SELECT MAX(UNYO.SEQ)
+                        FROM L1_UNYOCTL UNYO
+                        JOIN JOB_MANEGMENT JOB_M ON UNYO.JOBID = JOB_M.ID
+                        WHERE JOB_M.SCENARIO = :scenario
+                        AND JOB_M.EDA = :eda
+                    )";
 
-                // SQL実行
-                if (DatabaseManager.Instance.pobjOraDb.pExecOra(sql.ToString(), DICSSLORA.ACmnOra.clsMngOracle.peTran.Yes ) == false)
+                var parameters = new List<(string name, object value)>
                 {
-                    throw new Exception("ORACLE 運用処理管理Rの更新に失敗しました");
+                    ("scenario", scenario.Trim()),
+                    ("eda", eda.Trim())
+                };
+
+                if (!ExecuteParameterizedCommand(sql, parameters))
+                {
+                    throw new Exception("運用処理管理Rの更新に失敗しました");
                 }
 
+                LogFile.WriteLog($"UpdateUnyoCtrl: 正常に更新しました - {scenario}/{eda}");
                 return true;
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                ErrLogFile.WriteLog($"UpdateUnyoCtrl エラー: {e.Message}");
                 return false;
             }
         }
+
         #endregion
 
-
         #region ジョブ管理
-        /// <summary> 
+
+        /// <summary>
         /// シナリオから最大の枝番を取得
-        /// </summary> 
+        /// </summary>
         public static DataTable GetMaxEda(string scenario)
         {
             DataTable dt = new DataTable();
-            StringBuilder sql = new StringBuilder();
+
+            // 入力検証
+            if (!IsValidScenario(scenario))
+            {
+                ErrLogFile.WriteLog($"GetMaxEda: 無効なシナリオ - {scenario}");
+                return dt;
+            }
 
             try
             {
-                // SQL作成
-                sql.Append("select");
-                sql.Append("  max(eda) as Eda ");
-                sql.Append("from ");
-                sql.Append("  JOB_MANEGMENT ");
-                sql.Append("where");
-                sql.Append($"  SCENARIO = '{scenario}' ");
-                sql.Append("group by SCENARIO");
+                var sql = @"
+                    SELECT MAX(EDA) AS EDA 
+                    FROM JOB_MANEGMENT 
+                    WHERE SCENARIO = :scenario 
+                    AND RRSJFLG = 0
+                    GROUP BY SCENARIO";
 
-                // SQL取得
-                if (DatabaseManager.Instance.pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                var parameters = new List<(string name, object value)>
+                {
+                    ("scenario", scenario.Trim())
+                };
+
+                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
+
+                LogFile.WriteLog($"GetMaxEda: シナリオ {scenario} の最大枝番を取得しました");
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                ErrLogFile.WriteLog($"GetMaxEda エラー: {e.Message}");
+                throw new Exception($"最大枝番取得エラー: {e.Message}");
             }
 
             return dt;
         }
 
-        /// <summary> 
+        /// <summary>
         /// シナリオと枝番から、ジョブ管理を取得
-        /// </summary> 
+        /// </summary>
         public static DataTable GetJobManegment(string scenario, string eda)
         {
             DataTable dt = new DataTable();
-            StringBuilder sql = new StringBuilder();
+
+            // 入力検証
+            if (!IsValidScenario(scenario) || !IsValidEda(eda))
+            {
+                ErrLogFile.WriteLog($"GetJobManegment: 無効なパラメータ - {scenario}/{eda}");
+                return dt;
+            }
 
             try
             {
-                // SQL作成
-                sql.Append("select");
-                sql.Append("  *");
-                sql.Append("from ");
-                sql.Append("  JOB_MANEGMENT ");
-                sql.Append("where");
-                sql.Append("  RRSJFLG = 0 ");
-                sql.Append($" and SCENARIO = '{scenario}' ");
-                sql.Append($" and EDA = {eda} ");
+                var sql = @"
+                    SELECT 
+                        SCENARIO, EDA, ID, NAME, EXECUTION, EXECCOMMNAD, 
+                        STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO
+                    FROM JOB_MANEGMENT 
+                    WHERE RRSJFLG = 0 
+                    AND SCENARIO = :scenario 
+                    AND EDA = :eda";
 
-                // SQL取得
-                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
-                if (pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                var parameters = new List<(string name, object value)>
+                {
+                    ("scenario", scenario.Trim()),
+                    ("eda", eda.Trim())
+                };
+
+                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
+
+                LogFile.WriteLog($"GetJobManegment: {scenario}/{eda} のジョブ情報を取得しました");
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                ErrLogFile.WriteLog($"GetJobManegment エラー: {e.Message}");
+                throw new Exception($"ジョブ管理データ取得エラー: {e.Message}");
             }
 
             return dt;
         }
 
-        /// <summary> 
+        /// <summary>
         /// テーブル型のパラメータを元に、更新, 登録を実行する
-        /// </summary> 
+        /// </summary>
         public static bool UpdateJobManegment(JobManegment job)
         {
-            StringBuilder sql = new StringBuilder();
+            // 入力検証
+            var validationResult = ValidateJobManegment(job);
+            if (!validationResult.IsValid)
+            {
+                ErrLogFile.WriteLog($"UpdateJobManegment: 入力検証エラー - {string.Join(", ", validationResult.Errors)}");
+                return false;
+            }
 
             try
             {
-                // SQL作成
-                sql.Append("merge into JOB_MANEGMENT JM");
-                sql.Append($"  using (select '{job.SCENARIO}' as SCENARIO, '{job.EDA}' as EDA from dual) TMP");
-                sql.Append("     on (JM.SCENARIO = TMP.SCENARIO and JM.EDA = TMP.EDA)");
-                sql.Append("   when matched then");
-                sql.Append("     update set");
-                sql.Append($"      JM.ID = '{job.ID}'");
-                sql.Append($"    , JM.NAME = '{job.NAME}'");
-                sql.Append($"    , JM.EXECUTION = {job.EXECUTION}");
-                sql.Append($"    , JM.EXECCOMMNAD = '{job.EXECCOMMNAD}'");
-                sql.Append($"    , JM.STATUS = {job.STATUS}");
-                sql.Append($"    , JM.BEFOREJOB = '{job.BEFOREJOB}'");
-                sql.Append($"    , JM.JOBBOOLEAN = {job.JOBBOOLEAN}");
-                sql.Append($"    , JM.RECEIVE = '{job.RECEIVE}'");
-                sql.Append($"    , JM.SEND = '{job.SEND}'");
-                sql.Append($"    , JM.MEMO = '{job.MEMO}'");
-                sql.Append("   when not matched then");
-                sql.Append("     insert (");
-                sql.Append("       SCENARIO");
-                sql.Append("     , EDA");
-                sql.Append("     , ID");
-                sql.Append("     , NAME");
-                sql.Append("     , EXECUTION");
-                sql.Append("     , EXECCOMMNAD");
-                sql.Append("     , STATUS");
-                sql.Append("     , BEFOREJOB");
-                sql.Append("     , JOBBOOLEAN");
-                sql.Append("     , RECEIVE");
-                sql.Append("     , SEND");
-                sql.Append("     , MEMO");
-                sql.Append("     ) VALUES (");
-                sql.Append($"      '{job.SCENARIO}'");
-                sql.Append($"    , '{job.EDA}'");
-                sql.Append($"    , '{job.ID}'");
-                sql.Append($"    , '{job.NAME}'");
-                sql.Append($"    ,  {job.EXECUTION}");
-                sql.Append($"    , '{job.EXECCOMMNAD}'");
-                sql.Append($"    , '{job.STATUS}'");
-                sql.Append($"    , '{job.BEFOREJOB}'");
-                sql.Append($"    ,  {job.JOBBOOLEAN}");
-                sql.Append($"    , '{job.RECEIVE}'");
-                sql.Append($"    , '{job.SEND}'");
-                sql.Append($"    , '{job.MEMO}'");
-                sql.Append("     )");
+                var sql = @"
+                    MERGE INTO JOB_MANEGMENT JM
+                    USING (SELECT :scenario AS SCENARIO, :eda AS EDA FROM dual) TMP
+                    ON (JM.SCENARIO = TMP.SCENARIO AND JM.EDA = TMP.EDA AND JM.RRSJFLG = 0)
+                    WHEN MATCHED THEN
+                        UPDATE SET
+                            JM.ID = :id,
+                            JM.NAME = :name,
+                            JM.EXECUTION = :execution,
+                            JM.EXECCOMMNAD = :execcommnad,
+                            JM.STATUS = :status,
+                            JM.BEFOREJOB = :beforejob,
+                            JM.JOBBOOLEAN = :jobboolean,
+                            JM.RECEIVE = :receive,
+                            JM.SEND = :send,
+                            JM.MEMO = :memo,
+                            JM.UPDDT = SYSDATE
+                    WHEN NOT MATCHED THEN
+                        INSERT (SCENARIO, EDA, ID, NAME, EXECUTION, EXECCOMMNAD, STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO, RRSJFLG, INSDT, UPDDT)
+                        VALUES (:scenario, :eda, :id, :name, :execution, :execcommnad, :status, :beforejob, :jobboolean, :receive, :send, :memo, 0, SYSDATE, SYSDATE)";
 
-                // SQL実行
-                if (DatabaseManager.Instance.pobjOraDb.pExecOra(sql.ToString(), DICSSLORA.ACmnOra.clsMngOracle.peTran.Yes ) == false)
+                var parameters = new List<(string name, object value)>
                 {
-                    throw new Exception("ORACLE ジョブ管理の更新に失敗しました");
+                    ("scenario", job.SCENARIO?.Trim() ?? ""),
+                    ("eda", job.EDA?.Trim() ?? ""),
+                    ("id", job.ID?.Trim() ?? ""),
+                    ("name", job.NAME?.Trim() ?? ""),
+                    ("execution", job.EXECUTION),
+                    ("execcommnad", job.EXECCOMMNAD?.Trim() ?? ""),
+                    ("status", job.STATUS),
+                    ("beforejob", job.BEFOREJOB?.Trim() ?? ""),
+                    ("jobboolean", job.JOBBOOLEAN),
+                    ("receive", job.RECEIVE?.Trim() ?? ""),
+                    ("send", job.SEND?.Trim() ?? ""),
+                    ("memo", job.MEMO?.Trim() ?? "")
+                };
+
+                if (!ExecuteParameterizedCommand(sql, parameters))
+                {
+                    throw new Exception("ジョブ管理の更新に失敗しました");
                 }
 
+                LogFile.WriteLog($"UpdateJobManegment: {job.SCENARIO}/{job.EDA} を正常に更新しました");
                 return true;
             }
-            catch (Exception)
+            catch (Exception e)
             {
-
+                ErrLogFile.WriteLog($"UpdateJobManegment エラー: {e.Message}");
                 return false;
             }
         }
 
-        /// <summary> 
+        /// <summary>
         /// ジョブ管理 論理削除
-        /// </summary> 
+        /// </summary>
         public static bool DeleteJobManegment(string scenario, string eda)
         {
-            StringBuilder sql = new StringBuilder();
-
-            try
+            // 入力検証
+            if (!IsValidScenario(scenario) || !IsValidEda(eda))
             {
-                // SQL作成
-                sql.Append(" update JOB_MANEGMENT");
-                sql.Append(" set RRSJFLG = 1");
-                sql.Append(" where ");
-                sql.Append($"    SCENARIO = '{scenario}'");
-                sql.Append($"    and EDA = {eda}");
-
-                // SQL実行
-                if (DatabaseManager.Instance.pobjOraDb.pExecOra(sql.ToString(), DICSSLORA.ACmnOra.clsMngOracle.peTran.Yes ) == false)
-                {
-                    throw new Exception("ORACLE ジョブ管理の更新に失敗しました");
-                }
-
-                return true;
-            }
-            catch (Exception)
-            {
+                ErrLogFile.WriteLog($"DeleteJobManegment: 無効なパラメータ - {scenario}/{eda}");
                 return false;
             }
 
+            try
+            {
+                var sql = @"
+                    UPDATE JOB_MANEGMENT
+                    SET RRSJFLG = 1,
+                        UPDDT = SYSDATE
+                    WHERE SCENARIO = :scenario
+                    AND EDA = :eda
+                    AND RRSJFLG = 0";
+
+                var parameters = new List<(string name, object value)>
+                {
+                    ("scenario", scenario.Trim()),
+                    ("eda", eda.Trim())
+                };
+
+                if (!ExecuteParameterizedCommand(sql, parameters))
+                {
+                    throw new Exception("ジョブ管理の削除に失敗しました");
+                }
+
+                LogFile.WriteLog($"DeleteJobManegment: {scenario}/{eda} を正常に削除しました");
+                return true;
+            }
+            catch (Exception e)
+            {
+                ErrLogFile.WriteLog($"DeleteJobManegment エラー: {e.Message}");
+                return false;
+            }
         }
 
-        /// <summary> 
+        /// <summary>
         /// 受信先と送信先の一意のリストを取得
-        /// </summary> 
+        /// </summary>
         public static DataTable GetDistinctForRecvSend()
         {
             DataTable dt = new DataTable();
-            StringBuilder sql = new StringBuilder();
 
             try
             {
-                // SQL作成
-                sql.Append("select distinct ");
-                sql.Append("    'RECV' AS Type ");
-                sql.Append("   , RECEIVE AS VAL ");
-                sql.Append("from JOB_MANEGMENT ");
-                sql.Append("union ");
-                sql.Append("select distinct ");
-                sql.Append("    'SEND' AS Type ");
-                sql.Append("   , SEND AS VAL ");
-                sql.Append("from JOB_MANEGMENT ");
+                var sql = @"
+                    SELECT DISTINCT 
+                        'RECV' AS Type,
+                        RECEIVE AS VAL 
+                    FROM JOB_MANEGMENT 
+                    WHERE RRSJFLG = 0 
+                    AND RECEIVE IS NOT NULL 
+                    AND LENGTH(TRIM(RECEIVE)) > 0
+                    UNION 
+                    SELECT DISTINCT 
+                        'SEND' AS Type,
+                        SEND AS VAL 
+                    FROM JOB_MANEGMENT 
+                    WHERE RRSJFLG = 0 
+                    AND SEND IS NOT NULL 
+                    AND LENGTH(TRIM(SEND)) > 0
+                    ORDER BY Type, VAL";
 
-                // SQL取得
-                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
-                if (pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                var parameters = new List<(string name, object value)>();
+
+                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
+
+                LogFile.WriteLog($"GetDistinctForRecvSend: {dt.Rows.Count}件の受信先・送信先を取得しました");
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                ErrLogFile.WriteLog($"GetDistinctForRecvSend エラー: {e.Message}");
+                throw new Exception($"受信先・送信先データ取得エラー: {e.Message}");
             }
 
             return dt;
@@ -335,327 +420,678 @@ namespace JobManagementApp.Services
 
         #endregion
 
-
         #region ジョブ関連ファイル
-        /// <summary> 
+
+        /// <summary>
         /// Key項目から、ジョブIDとジョブ関連ファイル(1件)を取得
-        /// </summary> 
+        /// </summary>
         public static DataTable GetJobLinkFile(string scenario, string eda, string fileName, string filePath)
         {
             DataTable dt = new DataTable();
-            StringBuilder sql = new StringBuilder();
+
+            // 入力検証
+            if (!IsValidScenario(scenario) || !IsValidEda(eda) || 
+                string.IsNullOrWhiteSpace(fileName) || string.IsNullOrWhiteSpace(filePath))
+            {
+                ErrLogFile.WriteLog($"GetJobLinkFile: 無効なパラメータ - {scenario}/{eda}/{fileName}/{filePath}");
+                return dt;
+            }
 
             try
             {
-                // SQL作成
-                sql.Append("select");
-                sql.Append("    JM.ID as JOBID");
-                sql.Append("    ,JL.SCENARIO");
-                sql.Append("    ,JL.EDA");
-                sql.Append("    ,JL.FILENAME");
-                sql.Append("    ,JL.FILEPATH");
-                sql.Append("    ,JL.FILETYPE");
-                sql.Append("    ,JL.OBSERVERTYPE");
-                sql.Append(" from ");
-                sql.Append("    JOB_LINKFILE JL");
-                sql.Append(" left join");
-                sql.Append("    JOB_MANEGMENT JM");
-                sql.Append(" on");
-                sql.Append("    JL.SCENARIO = JM.SCENARIO");
-                sql.Append("    and JL.EDA = JM.EDA");
-                sql.Append(" where");
-                sql.Append($"   JL.SCENARIO = '{scenario}' ");
-                sql.Append($"   and JL.EDA = {eda} ");
-                sql.Append($"   and JL.FILENAME = '{fileName}'");
-                sql.Append($"   and JL.FILEPATH = '{filePath}' ");
+                var sql = @"
+                    SELECT
+                        JM.ID AS JOBID,
+                        JL.SCENARIO,
+                        JL.EDA,
+                        JL.FILENAME,
+                        JL.FILEPATH,
+                        JL.FILETYPE,
+                        JL.FILECOUNT,
+                        JL.OBSERVERTYPE
+                    FROM JOB_LINKFILE JL
+                    LEFT JOIN JOB_MANEGMENT JM ON JL.SCENARIO = JM.SCENARIO 
+                                              AND JL.EDA = JM.EDA
+                                              AND JM.RRSJFLG = 0
+                    WHERE JL.SCENARIO = :scenario 
+                    AND JL.EDA = :eda 
+                    AND JL.FILENAME = :filename
+                    AND JL.FILEPATH = :filepath";
 
-                // SQL取得
-                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
-                if (pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                var parameters = new List<(string name, object value)>
+                {
+                    ("scenario", scenario.Trim()),
+                    ("eda", eda.Trim()),
+                    ("filename", fileName.Trim()),
+                    ("filepath", filePath.Trim())
+                };
+
+                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
+
+                LogFile.WriteLog($"GetJobLinkFile: {scenario}/{eda}/{fileName} のファイル情報を取得しました");
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                ErrLogFile.WriteLog($"GetJobLinkFile エラー: {e.Message}");
+                throw new Exception($"ジョブ関連ファイルデータ取得エラー: {e.Message}");
             }
 
             return dt;
         }
 
-        /// <summary> 
+        /// <summary>
         /// シナリオと枝番から、ジョブ周辺ファイル データを取得
-        /// </summary> 
+        /// </summary>
         public static DataTable GetJobLinkFile(string scenario, string eda)
         {
             DataTable dt = new DataTable();
-            StringBuilder sql = new StringBuilder();
+
+            // 入力検証
+            if (!IsValidScenario(scenario) || !IsValidEda(eda))
+            {
+                ErrLogFile.WriteLog($"GetJobLinkFile: 無効なパラメータ - {scenario}/{eda}");
+                return dt;
+            }
 
             try
             {
-                // SQL作成
-                sql.Append("select");
-                sql.Append("    JM.ID");
-                sql.Append("    , JL.* ");
-                sql.Append("from");
-                sql.Append("    JOB_LINKFILE JL ");
-                sql.Append("    left join JOB_MANEGMENT JM ");
-                sql.Append("        on JL.SCENARIO = JM.SCENARIO ");
-                sql.Append("        and JL.EDA = JM.EDA ");
-                sql.Append("where");
-                sql.Append($"    JL.SCENARIO = '{scenario}' ");
-                sql.Append($"    and JL.EDA = {eda} ");
-                sql.Append("order by");
-                sql.Append("    JL.FILETYPE");
+                var sql = @"
+                    SELECT
+                        JM.ID,
+                        JL.SCENARIO,
+                        JL.EDA,
+                        JL.FILENAME,
+                        JL.FILEPATH,
+                        JL.FILETYPE,
+                        JL.FILECOUNT,
+                        JL.OBSERVERTYPE
+                    FROM JOB_LINKFILE JL 
+                    LEFT JOIN JOB_MANEGMENT JM ON JL.SCENARIO = JM.SCENARIO 
+                                              AND JL.EDA = JM.EDA 
+                                              AND JM.RRSJFLG = 0
+                    WHERE JL.SCENARIO = :scenario 
+                    AND JL.EDA = :eda 
+                    ORDER BY JL.FILETYPE, JL.FILENAME";
 
-                // SQL取得
-                if (DatabaseManager.Instance.pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                var parameters = new List<(string name, object value)>
+                {
+                    ("scenario", scenario.Trim()),
+                    ("eda", eda.Trim())
+                };
+
+                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
+
+                LogFile.WriteLog($"GetJobLinkFile: {scenario}/{eda} の関連ファイル {dt.Rows.Count}件を取得しました");
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                ErrLogFile.WriteLog($"GetJobLinkFile エラー: {e.Message}");
+                throw new Exception($"ジョブ関連ファイルリスト取得エラー: {e.Message}");
             }
 
             return dt;
         }
 
-        /// <summary> 
+        /// <summary>
         /// ジョブ関連ファイルを新規登録
-        /// </summary> 
+        /// </summary>
         public static bool UpdateJobLinkFile(JobLinkFile job)
         {
-            StringBuilder sql = new StringBuilder();
-
-            try
+            // 入力検証
+            var validationResult = ValidateJobLinkFile(job);
+            if (!validationResult.IsValid)
             {
-                // SQL作成
-                sql.Append("insert into JOB_LINKFILE (");
-                sql.Append("  SCENARIO");
-                sql.Append(", EDA");
-                sql.Append(", FILENAME");
-                sql.Append(", FILEPATH");
-                sql.Append(", FILETYPE");
-                sql.Append(", FILECOUNT");
-                sql.Append(", OBSERVERTYPE");
-                sql.Append(") VALUES (");
-                sql.Append($"  '{job.SCENARIO}'");
-                sql.Append($", '{job.EDA}'");
-                sql.Append($", '{job.FILENAME}'");
-                sql.Append($", '{job.FILEPATH}'");
-                sql.Append($",  {job.FILETYPE}");
-                sql.Append($",  {job.FILECOUNT}");
-                sql.Append($",  {job.OBSERVERTYPE}");
-                sql.Append(")");
-
-                // SQL実行
-                if (DatabaseManager.Instance.pobjOraDb.pExecOra(sql.ToString(), DICSSLORA.ACmnOra.clsMngOracle.peTran.Yes ) == false)
-                {
-                    throw new Exception("ORACLE ジョブ関連ファイルの更新に失敗しました");
-                }
-
-                return true;
-            }
-            catch (Exception)
-            {
+                ErrLogFile.WriteLog($"UpdateJobLinkFile: 入力検証エラー - {string.Join(", ", validationResult.Errors)}");
                 return false;
             }
-        }
-
-        /// <summary> 
-        /// ジョブ関連ファイル　物理削除
-        /// </summary> 
-        public static bool DeleteJobLinkFile(JobLinkFile job)
-        {
-            StringBuilder sql = new StringBuilder();
 
             try
             {
-                // SQL作成
-                sql.Append(" delete from JOB_LINKFILE");
-                sql.Append(" where ");
-                sql.Append($"    SCENARIO = '{job.SCENARIO}'");
-                sql.Append($"    and EDA = {job.EDA}");
-                sql.Append($"    and FILENAME = '{job.OLDFILENAME}'");
-                sql.Append($"    and FILEPATH = '{job.OLDFILEPATH}'");
+                var sql = @"
+                    INSERT INTO JOB_LINKFILE (
+                        SCENARIO, EDA, FILENAME, FILEPATH, FILETYPE, FILECOUNT, OBSERVERTYPE, INSDT, UPDDT
+                    ) VALUES (
+                        :scenario, :eda, :filename, :filepath, :filetype, :filecount, :observertype, SYSDATE, SYSDATE
+                    )";
 
-                // SQL実行
-                if (DatabaseManager.Instance.pobjOraDb.pExecOra(sql.ToString(), DICSSLORA.ACmnOra.clsMngOracle.peTran.Yes ) == false)
+                var parameters = new List<(string name, object value)>
                 {
-                    throw new Exception("ORACLE ジョブ管理の更新に失敗しました");
+                    ("scenario", job.SCENARIO?.Trim() ?? ""),
+                    ("eda", job.EDA?.Trim() ?? ""),
+                    ("filename", job.FILENAME?.Trim() ?? ""),
+                    ("filepath", job.FILEPATH?.Trim() ?? ""),
+                    ("filetype", job.FILETYPE),
+                    ("filecount", job.FILECOUNT),
+                    ("observertype", job.OBSERVERTYPE)
+                };
+
+                if (!ExecuteParameterizedCommand(sql, parameters))
+                {
+                    throw new Exception("ジョブ関連ファイルの登録に失敗しました");
                 }
 
+                LogFile.WriteLog($"UpdateJobLinkFile: {job.SCENARIO}/{job.EDA}/{job.FILENAME} を正常に登録しました");
                 return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-        #endregion
-
-
-        #region Main画面読み込み
-        /// <summary> 
-        /// Main画面 初期ロード時
-        /// </summary> 
-        public static DataTable LoadJobs(string userId)
-        {
-            // とりあえず全件
-            userId = "";
-
-            DataTable dt = new DataTable();
-            StringBuilder sql = new StringBuilder();
-
-            try
-            {
-                // SQL作成
-                sql.Append("select");
-                sql.Append("  JOB_M.SCENARIO as SCENARIO,");
-                sql.Append("  JOB_M.EDA as EDA,");
-                sql.Append("  JOB_M.ID as ID,");
-                sql.Append("  JOB_M.NAME as NAME,");
-                sql.Append("  JOB_M.EXECUTION as EXECUTION,");
-                sql.Append("  JOB_M.EXECCOMMNAD as EXECCOMMNAD,");
-                sql.Append("  JOB_M.STATUS as STATUS,");
-                sql.Append("  JOB_M.BEFOREJOB as BEFOREJOB,");
-                sql.Append("  JOB_M.JOBBOOLEAN as JOBBOOLEAN,");
-                sql.Append("  JOB_M.RECEIVE as RECEIVE,");
-                sql.Append("  JOB_M.SEND as SEND,");
-                sql.Append("  JOB_M.MEMO as MEMO ");
-                sql.Append("from ");
-                sql.Append("  JOB_MANEGMENT JOB_M ");
-                sql.Append("left join ");
-                sql.Append("  JOB_OWENREUSER JOB_O ");
-                sql.Append("  on JOB_M.SCENARIO = JOB_O.SCENARIO ");
-                sql.Append("  and JOB_M.EDA = JOB_O.EDA ");
-                sql.Append("where");
-                sql.Append("  JOB_M.RRSJFLG = 0 ");
-
-                // ユーザーが設定されている場合、条件追加
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    sql.Append($"  and JOB_O.USERID = '{userId}'");
-                }
-                sql.Append("order by");
-                sql.Append("  JOB_M.SCENARIO,");
-                sql.Append("  JOB_M.EDA");
-
-                // SQL取得
-                if (DatabaseManager.Instance.pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
-                {
-                    throw new Exception("ORACLE データ取得エラー");
-                }
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                ErrLogFile.WriteLog($"UpdateJobLinkFile エラー: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// ジョブ関連ファイル　物理削除
+        /// </summary>
+        public static bool DeleteJobLinkFile(JobLinkFile job)
+        {
+            // 入力検証
+            if (!IsValidScenario(job?.SCENARIO) || !IsValidEda(job?.EDA) ||
+                string.IsNullOrWhiteSpace(job?.OLDFILENAME) || string.IsNullOrWhiteSpace(job?.OLDFILEPATH))
+            {
+                ErrLogFile.WriteLog("DeleteJobLinkFile: 無効なパラメータです");
+                return false;
+            }
+
+            try
+            {
+                var sql = @"
+                    DELETE FROM JOB_LINKFILE
+                    WHERE SCENARIO = :scenario
+                    AND EDA = :eda
+                    AND FILENAME = :oldfilename
+                    AND FILEPATH = :oldfilepath";
+
+                var parameters = new List<(string name, object value)>
+                {
+                    ("scenario", job.SCENARIO.Trim()),
+                    ("eda", job.EDA.Trim()),
+                    ("oldfilename", job.OLDFILENAME.Trim()),
+                    ("oldfilepath", job.OLDFILEPATH.Trim())
+                };
+
+                if (!ExecuteParameterizedCommand(sql, parameters))
+                {
+                    throw new Exception("ジョブ関連ファイルの削除に失敗しました");
+                }
+
+                LogFile.WriteLog($"DeleteJobLinkFile: {job.SCENARIO}/{job.EDA}/{job.OLDFILENAME} を正常に削除しました");
+                return true;
+            }
+            catch (Exception e)
+            {
+                ErrLogFile.WriteLog($"DeleteJobLinkFile エラー: {e.Message}");
+                return false;
+            }
+        }
+
+        #endregion
+
+        #region Main画面読み込み
+
+        /// <summary>
+        /// Main画面 初期ロード時
+        /// </summary>
+        public static DataTable LoadJobs(string userId)
+        {
+            DataTable dt = new DataTable();
+
+            try
+            {
+                var sql = @"
+                    SELECT
+                        JOB_M.SCENARIO,
+                        JOB_M.EDA,
+                        JOB_M.ID,
+                        JOB_M.NAME,
+                        JOB_M.EXECUTION,
+                        JOB_M.EXECCOMMNAD,
+                        JOB_M.STATUS,
+                        JOB_M.BEFOREJOB,
+                        JOB_M.JOBBOOLEAN,
+                        JOB_M.RECEIVE,
+                        JOB_M.SEND,
+                        JOB_M.MEMO
+                    FROM JOB_MANEGMENT JOB_M 
+                    LEFT JOIN JOB_OWENREUSER JOB_O ON JOB_M.SCENARIO = JOB_O.SCENARIO 
+                                                   AND JOB_M.EDA = JOB_O.EDA 
+                    WHERE JOB_M.RRSJFLG = 0";
+
+                var parameters = new List<(string name, object value)>();
+
+                // ユーザーが設定されている場合、条件追加
+                if (!string.IsNullOrWhiteSpace(userId) && IsValidUserId(userId))
+                {
+                    sql += " AND JOB_O.USERID = :userid";
+                    parameters.Add(("userid", userId.Trim()));
+                }
+
+                sql += @"
+                    ORDER BY JOB_M.SCENARIO, JOB_M.EDA";
+
+                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                {
+                    throw new Exception("ORACLE データ取得エラー");
+                }
+
+                LogFile.WriteLog($"LoadJobs: {dt.Rows.Count}件のジョブを読み込みました (ユーザー: {userId ?? "全件"})");
+            }
+            catch (Exception e)
+            {
+                ErrLogFile.WriteLog($"LoadJobs エラー: {e.Message}");
+                throw new Exception($"ジョブリスト読み込みエラー: {e.Message}");
             }
 
             return dt;
         }
 
-        /// <summary> 
+        /// <summary>
         /// Main画面 検索条件付き
-        /// </summary> 
+        /// </summary>
         public static DataTable GetSearchJobList(string scenario, string jobId, string recv, string send)
         {
-
             DataTable dt = new DataTable();
-            StringBuilder sql = new StringBuilder();
 
             try
             {
-                // SQL作成
-                sql.Append("select");
-                sql.Append("  JOB_M.SCENARIO as SCENARIO,");
-                sql.Append("  JOB_M.EDA as EDA,");
-                sql.Append("  JOB_M.ID as ID,");
-                sql.Append("  JOB_M.NAME as NAME,");
-                sql.Append("  JOB_M.EXECUTION as EXECUTION,");
-                sql.Append("  JOB_M.EXECCOMMNAD as EXECCOMMNAD,");
-                sql.Append("  JOB_M.STATUS as STATUS,");
-                sql.Append("  JOB_M.BEFOREJOB as BEFOREJOB,");
-                sql.Append("  JOB_M.JOBBOOLEAN as JOBBOOLEAN,");
-                sql.Append("  JOB_M.RECEIVE as RECEIVE,");
-                sql.Append("  JOB_M.SEND as SEND,");
-                sql.Append("  JOB_M.MEMO as MEMO ");
-                sql.Append("from ");
-                sql.Append("  JOB_MANEGMENT JOB_M ");
-                sql.Append("left join ");
-                sql.Append("  JOB_OWENREUSER JOB_O ");
-                sql.Append("  on JOB_M.SCENARIO = JOB_O.SCENARIO ");
-                sql.Append("  and JOB_M.EDA = JOB_O.EDA ");
-                sql.Append("where");
-                sql.Append("  JOB_M.RRSJFLG = 0 ");
+                var sql = @"
+                    SELECT
+                        JOB_M.SCENARIO,
+                        JOB_M.EDA,
+                        JOB_M.ID,
+                        JOB_M.NAME,
+                        JOB_M.EXECUTION,
+                        JOB_M.EXECCOMMNAD,
+                        JOB_M.STATUS,
+                        JOB_M.BEFOREJOB,
+                        JOB_M.JOBBOOLEAN,
+                        JOB_M.RECEIVE,
+                        JOB_M.SEND,
+                        JOB_M.MEMO
+                    FROM JOB_MANEGMENT JOB_M 
+                    LEFT JOIN JOB_OWENREUSER JOB_O ON JOB_M.SCENARIO = JOB_O.SCENARIO 
+                                                   AND JOB_M.EDA = JOB_O.EDA 
+                    WHERE JOB_M.RRSJFLG = 0";
+
+                var parameters = new List<(string name, object value)>();
 
                 // 条件　シナリオ (複数検索)
-                if (!string.IsNullOrEmpty(scenario))
+                if (!string.IsNullOrWhiteSpace(scenario))
                 {
-                    // 全角のスペース、半角に置き換えして、分割
-                    string[] scenarios = scenario.Replace('　', ' ').Split(' ');
+                    var scenarios = scenario.Replace(',', ' ').Split(' ')
+                        .Where(s => !string.IsNullOrWhiteSpace(s) && IsValidScenario(s.Trim()))
+                        .Select(s => s.Trim())
+                        .ToArray();
 
-                    sql.Append($"  and JOB_M.SCENARIO in (");
-                    // 「,」で複数件対応
-                    for (int i = 0; i < scenarios.Count(); i++)
+                    if (scenarios.Length > 0)
                     {
-                        // 2回目以降、カンマ付与
-                        if (i > 0) sql.Append($" ,");
-                        sql.Append($"'{scenarios[i].Trim()}'");
+                        var scenarioConditions = new List<string>();
+                        for (int i = 0; i < scenarios.Length; i++)
+                        {
+                            var paramName = $"scenario{i}";
+                            scenarioConditions.Add($"JOB_M.SCENARIO = :{paramName}");
+                            parameters.Add((paramName, scenarios[i]));
+                        }
+                        sql += $" AND ({string.Join(" OR ", scenarioConditions)})";
                     }
-                    sql.Append($") ");
                 }
 
                 // 条件　ジョブID (複数検索)
-                if (!string.IsNullOrEmpty(jobId))
+                if (!string.IsNullOrWhiteSpace(jobId))
                 {
+                    var jobIds = jobId.Replace(',', ' ').Split(' ')
+                        .Where(j => !string.IsNullOrWhiteSpace(j) && IsValidJobId(j.Trim()))
+                        .Select(j => j.Trim())
+                        .ToArray();
 
-                    // 全角のスペース、半角に置き換えして、分割
-                    string[] jobIds = jobId.Replace('　', ' ').Split(' ');
-
-                    sql.Append($"  and JOB_M.ID in (");
-                    // 「,」で複数件対応
-                    for (int i = 0; i < jobIds.Count(); i++)
+                    if (jobIds.Length > 0)
                     {
-                        // 2回目以降、カンマ付与
-                        if (i > 0) sql.Append($" ,");
-                        sql.Append($"'{jobIds[i].Trim()}'");
+                        var jobIdConditions = new List<string>();
+                        for (int i = 0; i < jobIds.Length; i++)
+                        {
+                            var paramName = $"jobid{i}";
+                            jobIdConditions.Add($"JOB_M.ID = :{paramName}");
+                            parameters.Add((paramName, jobIds[i]));
+                        }
+                        sql += $" AND ({string.Join(" OR ", jobIdConditions)})";
                     }
-                    sql.Append($") ");
                 }
 
                 // 条件　受信先
-                if (!string.IsNullOrEmpty(recv))
+                if (!string.IsNullOrWhiteSpace(recv) && IsValidRecvSend(recv))
                 {
-                    sql.Append($"  and JOB_M.RECEIVE = '{recv}'");
+                    sql += " AND JOB_M.RECEIVE = :recv";
+                    parameters.Add(("recv", recv.Trim()));
                 }
+
                 // 条件　送信先
-                if (!string.IsNullOrEmpty(send))
+                if (!string.IsNullOrWhiteSpace(send) && IsValidRecvSend(send))
                 {
-                    sql.Append($"  and JOB_M.SEND = '{send}'");
+                    sql += " AND JOB_M.SEND = :send";
+                    parameters.Add(("send", send.Trim()));
                 }
 
-                sql.Append("order by");
-                sql.Append("  JOB_M.SCENARIO,");
-                sql.Append("  JOB_M.EDA");
+                sql += " ORDER BY JOB_M.SCENARIO, JOB_M.EDA";
 
-                // SQL取得
-                if (DatabaseManager.Instance.pobjOraDb.pSelectOra(sql.ToString(), ref dt) == false)
+                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
+
+                LogFile.WriteLog($"GetSearchJobList: {dt.Rows.Count}件のジョブを検索しました");
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                ErrLogFile.WriteLog($"GetSearchJobList エラー: {e.Message}");
+                throw new Exception($"ジョブ検索エラー: {e.Message}");
             }
 
             return dt;
         }
+
+        #endregion
+
+        #region 共通メソッド
+
+        /// <summary>
+        /// パラメータ化クエリを実行する共通メソッド
+        /// </summary>
+        private static bool ExecuteParameterizedQuery(string sql, List<(string name, object value)> parameters, ref DataTable dataTable)
+        {
+            try
+            {
+                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
+                
+                // TODO: 将来的には真のパラメータ化クエリを使用すること
+                // 現在は暫定対応としてエスケープ処理を実装
+                var safeSql = sql;
+                foreach (var param in parameters)
+                {
+                    var safeValue = EscapeForSql(param.value?.ToString() ?? "");
+                    safeSql = safeSql.Replace($":{param.name}", $"'{safeValue}'");
+                }
+
+                return pobjOraDb.pSelectOra(safeSql, ref dataTable);
+            }
+            catch (Exception e)
+            {
+                ErrLogFile.WriteLog($"ExecuteParameterizedQuery エラー: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// パラメータ化コマンドを実行する共通メソッド
+        /// </summary>
+        private static bool ExecuteParameterizedCommand(string sql, List<(string name, object value)> parameters)
+        {
+            try
+            {
+                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
+                
+                // TODO: 将来的には真のパラメータ化クエリを使用すること
+                // 現在は暫定対応としてエスケープ処理を実装
+                var safeSql = sql;
+                foreach (var param in parameters)
+                {
+                    var safeValue = EscapeForSql(param.value?.ToString() ?? "");
+                    safeSql = safeSql.Replace($":{param.name}", $"'{safeValue}'");
+                }
+
+                return pobjOraDb.pExecOra(safeSql, DICSSLORA.ACmnOra.clsMngOracle.peTran.Yes);
+            }
+            catch (Exception e)
+            {
+                ErrLogFile.WriteLog($"ExecuteParameterizedCommand エラー: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// SQL文字列をエスケープする（暫定）
+        /// </summary>
+        private static string EscapeForSql(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "";
+
+            return input
+                .Replace("'", "''")           // シングルクォートをエスケープ
+                .Replace(";", "")             // セミコロンを除去
+                .Replace("--", "")            // SQLコメントを除去
+                .Replace("/*", "")            // ブロックコメント開始を除去
+                .Replace("*/", "")            // ブロックコメント終了を除去
+                .Replace("xp_", "")           // 危険なストアドプロシージャ呼び出しを除去
+                .Replace("sp_", "")           // 危険なストアドプロシージャ呼び出しを除去
+                .Replace("DROP", "")          // DROP文を除去
+                .Replace("DELETE", "")        // DELETE文を除去（値としてのDELETEは問題になる可能性あり）
+                .Replace("INSERT", "")        // INSERT文を除去
+                .Replace("UPDATE", "")        // UPDATE文を除去
+                .Replace("EXEC", "")          // EXEC文を除去
+                .Replace("EXECUTE", "")       // EXECUTE文を除去
+                .Replace("UNION", "")         // UNION文を除去
+                .Replace("SELECT", "")        // SELECT文を除去
+                .Replace("TRUNCATE", "")      // TRUNCATE文を除去
+                .Replace("ALTER", "");        // ALTER文を除去
+        }
+
+        #endregion
+
+        #region 入力検証メソッド
+
+        /// <summary>
+        /// シナリオの妥当性をチェック
+        /// </summary>
+        private static bool IsValidScenario(string scenario)
+        {
+            if (string.IsNullOrWhiteSpace(scenario))
+                return false;
+
+            var trimmed = scenario.Trim();
+            
+            // 長さチェック（通常のシナリオIDは6文字程度）
+            if (trimmed.Length > 20)
+                return false;
+
+            // 英数字とハイフンのみ許可
+            return System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[A-Za-z0-9\-]+$");
+        }
+
+        /// <summary>
+        /// 枝番の妥当性をチェック
+        /// </summary>
+        private static bool IsValidEda(string eda)
+        {
+            if (string.IsNullOrWhiteSpace(eda))
+                return false;
+
+            var trimmed = eda.Trim();
+            
+            // 数値チェック
+            if (!int.TryParse(trimmed, out int value))
+                return false;
+
+            // 範囲チェック（1-9999）
+            return value >= 1 && value <= 9999;
+        }
+
+        /// <summary>
+        /// ジョブIDの妥当性をチェック
+        /// </summary>
+        private static bool IsValidJobId(string jobId)
+        {
+            if (string.IsNullOrWhiteSpace(jobId))
+                return false;
+
+            var trimmed = jobId.Trim();
+            
+            // 長さチェック
+            if (trimmed.Length > 50)
+                return false;
+
+            // 英数字、ハイフン、アンダースコアのみ許可
+            return System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[A-Za-z0-9\-_]+$");
+        }
+
+        /// <summary>
+        /// ユーザーIDの妥当性をチェック
+        /// </summary>
+        private static bool IsValidUserId(string userId)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return false;
+
+            var trimmed = userId.Trim();
+            
+            // 長さチェック
+            if (trimmed.Length > 30)
+                return false;
+
+            // 英数字のみ許可
+            return System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[A-Za-z0-9]+$");
+        }
+
+        /// <summary>
+        /// 受信先・送信先の妥当性をチェック
+        /// </summary>
+        private static bool IsValidRecvSend(string recvSend)
+        {
+            if (string.IsNullOrWhiteSpace(recvSend))
+                return false;
+
+            var trimmed = recvSend.Trim();
+            
+            // 長さチェック
+            if (trimmed.Length > 100)
+                return false;
+
+            // 基本的な文字のみ許可（日本語含む）
+            return !ContainsDangerousCharacters(trimmed);
+        }
+
+        /// <summary>
+        /// 日付フォーマットの妥当性をチェック
+        /// </summary>
+        private static bool IsValidDateFormat(string date)
+        {
+            return DateTime.TryParseExact(date, "yyyy/MM/dd HH:mm", null, 
+                System.Globalization.DateTimeStyles.None, out _);
+        }
+
+        /// <summary>
+        /// 危険な文字が含まれているかチェック
+        /// </summary>
+        private static bool ContainsDangerousCharacters(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return false;
+
+            var dangerousPatterns = new[] { 
+                "'", "\"", ";", "--", "/*", "*/", 
+                "DROP", "DELETE", "INSERT", "UPDATE", "TRUNCATE", "ALTER",
+                "EXEC", "EXECUTE", "UNION", "SELECT", "xp_", "sp_"
+            };
+            
+            var upperInput = input.ToUpper();
+            return dangerousPatterns.Any(pattern => upperInput.Contains(pattern));
+        }
+
+        /// <summary>
+        /// JobManegmentオブジェクトの妥当性をチェック
+        /// </summary>
+        private static ValidationResult ValidateJobManegment(JobManegment job)
+        {
+            var errors = new List<string>();
+
+            if (job == null)
+            {
+                errors.Add("ジョブオブジェクトがnullです");
+                return new ValidationResult(false, errors);
+            }
+
+            if (!IsValidScenario(job.SCENARIO))
+                errors.Add("シナリオが無効です");
+
+            if (!IsValidEda(job.EDA))
+                errors.Add("枝番が無効です");
+
+            if (!IsValidJobId(job.ID))
+                errors.Add("ジョブIDが無効です");
+
+            if (string.IsNullOrWhiteSpace(job.NAME) || job.NAME.Length > 100)
+                errors.Add("ジョブ名が無効です（1-100文字）");
+
+            if (job.EXECUTION < 0 || job.EXECUTION > 10)
+                errors.Add("実行方法が無効です");
+
+            if (job.STATUS < 0 || job.STATUS > 10)
+                errors.Add("ステータスが無効です");
+
+            if (job.JOBBOOLEAN < 0 || job.JOBBOOLEAN > 1)
+                errors.Add("ジョブ実行可否が無効です");
+
+            return new ValidationResult(errors.Count == 0, errors);
+        }
+
+        /// <summary>
+        /// JobLinkFileオブジェクトの妥当性をチェック
+        /// </summary>
+        private static ValidationResult ValidateJobLinkFile(JobLinkFile job)
+        {
+            var errors = new List<string>();
+
+            if (job == null)
+            {
+                errors.Add("ジョブファイルオブジェクトがnullです");
+                return new ValidationResult(false, errors);
+            }
+
+            if (!IsValidScenario(job.SCENARIO))
+                errors.Add("シナリオが無効です");
+
+            if (!IsValidEda(job.EDA))
+                errors.Add("枝番が無効です");
+
+            if (string.IsNullOrWhiteSpace(job.FILENAME) || job.FILENAME.Length > 255)
+                errors.Add("ファイル名が無効です");
+
+            if (string.IsNullOrWhiteSpace(job.FILEPATH) || job.FILEPATH.Length > 500)
+                errors.Add("ファイルパスが無効です");
+
+            if (job.FILETYPE < 0 || job.FILETYPE > 10)
+                errors.Add("ファイルタイプが無効です");
+
+            if (job.FILECOUNT < 1 || job.FILECOUNT > 100)
+                errors.Add("ファイル数が無効です");
+
+            return new ValidationResult(errors.Count == 0, errors);
+        }
+
+        #endregion
+
+        #region 内部クラス
+
+        /// <summary>
+        /// 検証結果クラス
+        /// </summary>
+        private class ValidationResult
+        {
+            public bool IsValid { get; }
+            public List<string> Errors { get; }
+
+            public ValidationResult(bool isValid, List<string> errors)
+            {
+                IsValid = isValid;
+                Errors = errors ?? new List<string>();
+            }
+        }
+
         #endregion
     }
 }
-
