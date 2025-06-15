@@ -12,6 +12,9 @@ using System.Windows;
 
 namespace JobManagementApp.Commands
 {
+    /// <summary>
+    /// 緊急修正: 適切なエラーハンドリングと入力検証を追加
+    /// </summary>
     class JobDetailCommand : JobCommandArgument
     {
         private readonly JobDetailViewModel _vm;
@@ -19,127 +22,410 @@ namespace JobManagementApp.Commands
 
         public JobDetailCommand(JobDetailViewModel VM, IJobDetailModel IF)
         {
-            _vm = VM;
-            _if = IF;
+            _vm = VM ?? throw new ArgumentNullException(nameof(VM));
+            _if = IF ?? throw new ArgumentNullException(nameof(IF));
         }
 
         /// <summary> 
         /// 画面項目 読み込み処理
+        /// 緊急修正: エラーハンドリングと入力検証を追加
         /// </summary> 
-        public void LoadViewModel()
+        public async void LoadViewModel()
         {
-            _if.GetJobManegment(_vm.Scenario, _vm.Eda).ContinueWith(x =>
+            try
             {
-                // 画面項目に設定
-                _vm.Scenario = x.Result.SCENARIO;
-                _vm.Eda = x.Result.EDA;
-                _vm.Id = x.Result.ID;
-                _vm.Name = x.Result.NAME;
-                _vm.SelectedExecution = (emExecution)x.Result.EXECUTION;
-                _vm.ExecCommnad = x.Result.EXECCOMMNAD;
-                _vm.SelectedStatus = (emStatus)x.Result.STATUS;
-                _vm.BeforeJob = x.Result.BEFOREJOB;
-                _vm.JobBoolean = x.Result.JOBBOOLEAN != 0;
-                _vm.Receive = x.Result.RECEIVE;
-                _vm.Send = x.Result.SEND;
-                _vm.Memo = x.Result.MEMO;
-            });
+                // 入力検証
+                if (string.IsNullOrWhiteSpace(_vm.Scenario) || string.IsNullOrWhiteSpace(_vm.Eda))
+                {
+                    ShowErrorMessage("シナリオと枝番が設定されていません。");
+                    return;
+                }
+
+                // ローディング状態の設定
+                _vm.IsButtonEnabled = false;
+
+                var result = await _if.GetJobManegment(_vm.Scenario, _vm.Eda);
+
+                if (result != null && !string.IsNullOrEmpty(result.SCENARIO))
+                {
+                    // UIスレッドで画面項目に設定
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        _vm.Scenario = result.SCENARIO ?? "";
+                        _vm.Eda = result.EDA ?? "";
+                        _vm.Id = result.ID ?? "";
+                        _vm.Name = result.NAME ?? "";
+                        _vm.SelectedExecution = (emExecution)result.EXECUTION;
+                        _vm.ExecCommnad = result.EXECCOMMNAD ?? "";
+                        _vm.SelectedStatus = (emStatus)result.STATUS;
+                        _vm.BeforeJob = result.BEFOREJOB ?? "";
+                        _vm.JobBoolean = result.JOBBOOLEAN != 0;
+                        _vm.Receive = result.RECEIVE ?? "";
+                        _vm.Send = result.SEND ?? "";
+                        _vm.Memo = (result.MEMO ?? "").Replace("\\n", Environment.NewLine);
+                    });
+
+                    LogFile.WriteLog($"ジョブデータを正常に読み込みました: {_vm.Scenario}-{_vm.Eda}");
+                }
+                else
+                {
+                    ShowWarningMessage($"シナリオ '{_vm.Scenario}' 枝番 '{_vm.Eda}' のジョブが見つかりませんでした。");
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"LoadViewModel エラー: {ex.Message}");
+                ShowErrorMessage("ジョブデータの読み込みに失敗しました。ネットワーク接続とデータベース接続を確認してください。");
+            }
+            finally
+            {
+                _vm.IsButtonEnabled = true;
+            }
         }
 
         /// <summary> 
         /// 登録ボタン クリック処理
+        /// 緊急修正: エラーハンドリングと入力検証を追加
         /// </summary> 
-        public void UpdateButton_Click(object _)
+        public async void UpdateButton_Click(object _)
         {
-            // ボタン処理可能か
-            if (!_vm.IsButtonEnabled) return;
-            _vm.IsButtonEnabled = false;
-
-            // テーブル型に格納
-            var job = new JobManegment
+            try
             {
-                SCENARIO = _vm.Scenario,
-                EDA = _vm.Eda,
-                ID = _vm.Id,
-                NAME = (_vm.Name is null) ? "" : _vm.Name,
-                EXECUTION = (int)_vm.SelectedExecution,
-                EXECCOMMNAD = (_vm.ExecCommnad is null) ? "" : _vm.ExecCommnad,
-                STATUS = (int)_vm.SelectedStatus,
-                BEFOREJOB = (_vm.BeforeJob is null) ? "" : _vm.BeforeJob,
-                JOBBOOLEAN = _vm.JobBoolean ? 1 : 0,
-                RECEIVE = (_vm.Receive is null) ? "" : _vm.Receive,
-                SEND = (_vm.Send is null) ? "" : _vm.Send,
-                MEMO = (_vm.Memo is null) ? "" : _vm.Memo.Replace(Environment.NewLine, "\\n")
-            };
+                // ボタン処理可能か
+                if (!_vm.IsButtonEnabled) return;
 
-            // 登録処理 実施
-            _if.UpdateJobManegment(job).ContinueWith(x =>
-            {
-                if (x.Result)
+                // 入力検証
+                var validationResult = ValidateInput();
+                if (!validationResult.IsValid)
                 {
-                    MessageBox.Show("ジョブ管理の更新が完了しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
-                    // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
-                    _vm.RequestClose_event();
-
-                    // 自身を閉じる
-                    _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
-                }
-                else
-                {
-                    MessageBox.Show("ジョブ管理の更新に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    ShowValidationErrors(validationResult.Errors);
+                    return;
                 }
 
+                _vm.IsButtonEnabled = false;
+
+                // テーブル型に格納
+                var job = CreateJobFromViewModel();
+
+                // 登録処理 実施
+                var updateResult = await _if.UpdateJobManegment(job);
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    if (updateResult)
+                    {
+                        ShowSuccessMessage("ジョブ管理の更新が完了しました。");
+                        
+                        // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
+                        _vm.RequestClose_event();
+
+                        // 自身を閉じる
+                        _vm.window?.Close();
+
+                        LogFile.WriteLog($"ジョブ管理を正常に更新しました: {_vm.Scenario}-{_vm.Eda}");
+                    }
+                    else
+                    {
+                        ShowErrorMessage("ジョブ管理の更新に失敗しました。入力内容を確認してください。");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"UpdateButton_Click エラー: {ex.Message}");
+                ShowErrorMessage("更新処理中にエラーが発生しました。システム管理者に連絡してください。");
+            }
+            finally
+            {
                 _vm.IsButtonEnabled = true;
-            });
+            }
         }
 
         /// <summary> 
         /// 閉じるボタン クリック処理
+        /// 緊急修正: エラーハンドリングを追加
         /// </summary> 
         public void CloseButton_Click(object _)
         {
-            // ボタン処理可能か
-            if (!_vm.IsButtonEnabled) return;
+            try
+            {
+                // ボタン処理可能か
+                if (!_vm.IsButtonEnabled) return;
 
-            _vm.window?.Close();
+                _vm.window?.Close();
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"CloseButton_Click エラー: {ex.Message}");
+                // クローズ処理のエラーは通常ユーザーに表示する必要はない
+            }
         }
 
         /// <summary> 
         /// 削除ボタン クリック処理
+        /// 緊急修正: エラーハンドリングと確認ダイアログを追加
         /// </summary> 
-        public void DeleteButton_Click(object _)
+        public async void DeleteButton_Click(object _)
         {
-            // ボタン処理可能か
-            if (!_vm.IsButtonEnabled) return;
-            _vm.IsButtonEnabled = false;
-
-            // 削除処理 実施
-            _if.DeleteJobManegment(_vm.Scenario, _vm.Eda).ContinueWith(x =>
+            try
             {
-                if (x.Result)
+                // ボタン処理可能か
+                if (!_vm.IsButtonEnabled) return;
+
+                // 削除確認
+                var confirmResult = MessageBox.Show(
+                    $"ジョブ '{_vm.Id}' を削除してもよろしいですか？\nこの操作は取り消すことができません。",
+                    "削除確認",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No,
+                    MessageBoxOptions.DefaultDesktopOnly);
+
+                if (confirmResult != MessageBoxResult.Yes)
                 {
-                    MessageBox.Show("ジョブ管理の論理削除フラグを立てました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
-                    // 自身を閉じる
-                    _vm.window?.Dispatcher.Invoke(() => _vm.window.Close());
-                }
-                else
-                {
-                    MessageBox.Show("ジョブ管理の削除に失敗しました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    return;
                 }
 
+                // 入力検証
+                if (string.IsNullOrWhiteSpace(_vm.Scenario) || string.IsNullOrWhiteSpace(_vm.Eda))
+                {
+                    ShowErrorMessage("削除対象のシナリオまたは枝番が設定されていません。");
+                    return;
+                }
+
+                _vm.IsButtonEnabled = false;
+
+                // 削除処理 実施
+                var deleteResult = await _if.DeleteJobManegment(_vm.Scenario, _vm.Eda);
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    if (deleteResult)
+                    {
+                        ShowSuccessMessage("ジョブ管理の論理削除フラグを立てました。");
+                        
+                        // 自身を閉じる
+                        _vm.window?.Close();
+
+                        LogFile.WriteLog($"ジョブ管理を正常に削除しました: {_vm.Scenario}-{_vm.Eda}");
+                    }
+                    else
+                    {
+                        ShowErrorMessage("ジョブ管理の削除に失敗しました。対象のジョブが存在するか確認してください。");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"DeleteButton_Click エラー: {ex.Message}");
+                ShowErrorMessage("削除処理中にエラーが発生しました。システム管理者に連絡してください。");
+            }
+            finally
+            {
                 _vm.IsButtonEnabled = true;
-            });
+            }
         }
 
         /// <summary> 
         /// シナリオ　フォーカスアウト処理
+        /// 緊急修正: エラーハンドリングと入力検証を追加
         /// </summary> 
-        public void ScenarioTextBox_LostFocus(object _)
+        public async void ScenarioTextBox_LostFocus(object _)
         {
-            _if.GetNewEda(_vm.Scenario).ContinueWith(x => 
+            try
             {
-                _vm.Eda = x.Result.ToString();
-            });
+                // 入力検証
+                if (string.IsNullOrWhiteSpace(_vm.Scenario))
+                {
+                    return; // 空の場合は何もしない
+                }
+
+                var newEda = await _if.GetNewEda(_vm.Scenario);
+                
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _vm.Eda = newEda.ToString();
+                });
+
+                LogFile.WriteLog($"新しい枝番を取得しました: {_vm.Scenario} -> {newEda}");
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ScenarioTextBox_LostFocus エラー: {ex.Message}");
+                ShowErrorMessage("枝番の自動設定に失敗しました。手動で入力してください。");
+            }
         }
+
+        #region 緊急追加: ヘルパーメソッド
+
+        /// <summary>
+        /// 入力検証を実行
+        /// </summary>
+        private ValidationResult ValidateInput()
+        {
+            var errors = new List<string>();
+
+            // 必須項目チェック
+            if (string.IsNullOrWhiteSpace(_vm.Scenario))
+                errors.Add("シナリオは必須です。");
+
+            if (string.IsNullOrWhiteSpace(_vm.Eda))
+                errors.Add("枝番は必須です。");
+
+            if (string.IsNullOrWhiteSpace(_vm.Id))
+                errors.Add("ジョブIDは必須です。");
+
+            if (string.IsNullOrWhiteSpace(_vm.Name))
+                errors.Add("ジョブ名は必須です。");
+
+            // 文字数制限チェック
+            if (_vm.Id?.Length > 50)
+                errors.Add("ジョブIDは50文字以内で入力してください。");
+
+            if (_vm.Name?.Length > 100)
+                errors.Add("ジョブ名は100文字以内で入力してください。");
+
+            // 枝番の数値チェック
+            if (!int.TryParse(_vm.Eda, out int edaValue) || edaValue < 1)
+                errors.Add("枝番は1以上の数値で入力してください。");
+
+            // 特殊文字チェック（SQLインジェクション対策）
+            if (ContainsDangerousCharacters(_vm.Scenario) || 
+                ContainsDangerousCharacters(_vm.Eda) ||
+                ContainsDangerousCharacters(_vm.Id))
+            {
+                errors.Add("シナリオ、枝番、ジョブIDに使用できない文字が含まれています。");
+            }
+
+            return new ValidationResult(errors.Count == 0, errors);
+        }
+
+        /// <summary>
+        /// 危険な文字が含まれているかチェック
+        /// </summary>
+        private bool ContainsDangerousCharacters(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return false;
+
+            var dangerousChars = new[] { "'", "\"", ";", "--", "/*", "*/", "DROP", "DELETE", "INSERT", "UPDATE" };
+            return dangerousChars.Any(dangerous => input.ToUpper().Contains(dangerous));
+        }
+
+        /// <summary>
+        /// ViewModelからJobManegmentオブジェクトを作成
+        /// </summary>
+        private JobManegment CreateJobFromViewModel()
+        {
+            return new JobManegment
+            {
+                SCENARIO = _vm.Scenario?.Trim() ?? "",
+                EDA = _vm.Eda?.Trim() ?? "",
+                ID = _vm.Id?.Trim() ?? "",
+                NAME = _vm.Name?.Trim() ?? "",
+                EXECUTION = (int)_vm.SelectedExecution,
+                EXECCOMMNAD = _vm.ExecCommnad?.Trim() ?? "",
+                STATUS = (int)_vm.SelectedStatus,
+                BEFOREJOB = _vm.BeforeJob?.Trim() ?? "",
+                JOBBOOLEAN = _vm.JobBoolean ? 1 : 0,
+                RECEIVE = _vm.Receive?.Trim() ?? "",
+                SEND = _vm.Send?.Trim() ?? "",
+                MEMO = (_vm.Memo?.Replace(Environment.NewLine, "\\n"))?.Trim() ?? ""
+            };
+        }
+
+        /// <summary>
+        /// エラーメッセージ表示
+        /// </summary>
+        private void ShowErrorMessage(string message)
+        {
+            try
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show(message, "エラー", MessageBoxButton.OK, MessageBoxImage.Error, 
+                        MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ShowErrorMessage エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 警告メッセージ表示
+        /// </summary>
+        private void ShowWarningMessage(string message)
+        {
+            try
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show(message, "警告", MessageBoxButton.OK, MessageBoxImage.Warning, 
+                        MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ShowWarningMessage エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 成功メッセージ表示
+        /// </summary>
+        private void ShowSuccessMessage(string message)
+        {
+            try
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show(message, "完了", MessageBoxButton.OK, MessageBoxImage.Information, 
+                        MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ShowSuccessMessage エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 検証エラー表示
+        /// </summary>
+        private void ShowValidationErrors(List<string> errors)
+        {
+            try
+            {
+                var message = "以下のエラーを修正してください：\n\n" + string.Join("\n", errors);
+                ShowErrorMessage(message);
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ShowValidationErrors エラー: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region 内部クラス
+
+        /// <summary>
+        /// 検証結果クラス
+        /// </summary>
+        private class ValidationResult
+        {
+            public bool IsValid { get; }
+            public List<string> Errors { get; }
+
+            public ValidationResult(bool isValid, List<string> errors)
+            {
+                IsValid = isValid;
+                Errors = errors ?? new List<string>();
+            }
+        }
+
+        #endregion
     }
 }
