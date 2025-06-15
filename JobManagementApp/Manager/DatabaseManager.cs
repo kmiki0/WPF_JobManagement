@@ -10,24 +10,25 @@ using Oracle.ManagedDataAccess.Types;
 using DICSSLORA.ACmnFunc;
 using DICSSLORA.ACmnIni;
 using DICSSLORA.ACmnLog;
+using JobManagementApp.Configuration;
 
 namespace JobManagementApp.Manager
 {
     /// <summary>
-    /// データベース管理クラス - Oracle.ManagedDataAccess.Client対応版
-    /// IDisposableを実装してリソースリークを防止
+    /// データベース管理クラス - XML設定・複数データベース対応版
     /// </summary>
     public class DatabaseManager : IDisposable
     {
         #region フィールドとプロパティ
 
-        public DICSSLORA.ACmnIni.clsMngIniFile pobjIniFile { get; private set; }
         public DICSSLORA.ACmnLog.clsMngLogFile pobjActLog { get; private set; }
         public DICSSLORA.ACmnLog.clsMngLogFile pobjErrLog { get; private set; }
         
-        // Oracle.ManagedDataAccess.Client用
-        private OracleConnection _oracleConnection;
-        private string _connectionString;
+        // 複数データベース接続管理
+        private readonly Dictionary<string, OracleConnection> _connections;
+        private readonly Dictionary<string, DatabaseSettings> _databaseSettings;
+        private string _currentDatabaseName;
+        private DatabaseSettings _currentDatabase;
 
         private static DatabaseManager _instance;
         private static readonly object _lock = new object();
@@ -36,16 +37,9 @@ namespace JobManagementApp.Manager
 
         // 接続状態管理
         private bool _isInitialized = false;
-        private bool _isConnected = false;
-        private DateTime _lastConnectionCheck = DateTime.MinValue;
+        private readonly Dictionary<string, bool> _connectionStates;
+        private readonly Dictionary<string, DateTime> _lastConnectionChecks;
         private readonly TimeSpan _connectionCheckInterval = TimeSpan.FromMinutes(5);
-
-        // 設定情報
-        private string _dataSource;
-        private string _userId;
-        private string _password;
-        private int _retrySleep;
-        private int _retryCount;
 
         #endregion
 
@@ -58,6 +52,11 @@ namespace JobManagementApp.Manager
         {
             try
             {
+                _connections = new Dictionary<string, OracleConnection>(StringComparer.OrdinalIgnoreCase);
+                _databaseSettings = new Dictionary<string, DatabaseSettings>(StringComparer.OrdinalIgnoreCase);
+                _connectionStates = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                _lastConnectionChecks = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
                 InitializeComponents();
                 LogFile.WriteLog("DatabaseManager インスタンスを正常に作成しました");
             }
@@ -100,14 +99,11 @@ namespace JobManagementApp.Manager
         {
             try
             {
-                // INIファイルの初期化
-                InitializeIniFile();
-
                 // ログファイルの初期化
                 InitializeLogFiles();
 
-                // Oracle接続の初期化
-                InitializeOracleConnection();
+                // XML設定ファイルからデータベース設定を読み込み
+                LoadDatabaseSettings();
 
                 _isInitialized = true;
                 LogFile.WriteLog("DatabaseManager コンポーネントの初期化が完了しました");
@@ -116,29 +112,6 @@ namespace JobManagementApp.Manager
             {
                 ErrLogFile.WriteLog($"InitializeComponents エラー: {ex.Message}");
                 throw;
-            }
-        }
-
-        /// <summary>
-        /// INIファイルの初期化
-        /// </summary>
-        private void InitializeIniFile()
-        {
-            try
-            {
-                pobjIniFile = new clsMngIniFile(clsDefineCnst.pcnstININAME);
-                var result = pobjIniFile.pGetInfo();
-                
-                if (!result)
-                {
-                    throw new InvalidOperationException("INIファイルの読み込みに失敗しました");
-                }
-
-                LogFile.WriteLog($"INIファイルを正常に読み込みました: {clsDefineCnst.pcnstININAME}");
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("INIファイルの初期化に失敗しました", ex);
             }
         }
 
@@ -172,44 +145,42 @@ namespace JobManagementApp.Manager
         }
 
         /// <summary>
-        /// Oracle接続の初期化
+        /// XML設定ファイルからデータベース設定を読み込み
         /// </summary>
-        private void InitializeOracleConnection()
+        private void LoadDatabaseSettings()
         {
             try
             {
-                _dataSource = pobjIniFile.pGetItemString("DB", "DATA_SOURCE");
-                _userId = pobjIniFile.pGetItemString("DB", "USER_ID");
-                _password = pobjIniFile.pGetItemString("DB", "PASSWORD");
-                _retrySleep = pobjIniFile.pGetItemInt("DB", "RTRY_SLEEP");
-                _retryCount = pobjIniFile.pGetItemInt("DB", "RTRY_CNT");
-
-                // 接続情報の検証
-                if (string.IsNullOrWhiteSpace(_dataSource) || 
-                    string.IsNullOrWhiteSpace(_userId) || 
-                    string.IsNullOrWhiteSpace(_password))
+                var configManager = DatabaseConfigurationManager.Instance;
+                
+                // 設定の妥当性チェック
+                if (!configManager.ValidateConfiguration())
                 {
-                    throw new InvalidOperationException("データベース接続情報が不完全です");
+                    throw new InvalidOperationException("データベース設定の検証に失敗しました");
                 }
 
-                // 接続文字列の構築
-                var builder = new OracleConnectionStringBuilder
+                // 全データベース設定を読み込み
+                foreach (var dbSettings in configManager.GetAllDatabases())
                 {
-                    DataSource = _dataSource,
-                    UserID = _userId,
-                    Password = _password,
-                    ConnectionTimeout = 30
-                };
+                    _databaseSettings[dbSettings.Name] = dbSettings;
+                    _connectionStates[dbSettings.Name] = false;
+                    _lastConnectionChecks[dbSettings.Name] = DateTime.MinValue;
+                    
+                    LogFile.WriteLog($"データベース設定を登録しました: {dbSettings.Name} -> {dbSettings.DataSource}");
+                }
 
+                // デフォルトデータベースを設定
+                _currentDatabase = configManager.GetDefaultDatabase();
+                _currentDatabaseName = _currentDatabase.Name;
 
+                LogFile.WriteLog($"デフォルトデータベースを設定しました: {_currentDatabaseName}");
                 
-                _connectionString = builder.ConnectionString;
-
-                LogFile.WriteLog($"Oracle接続を正常に初期化しました (DataSource: {_dataSource})");
+                // 設定情報をログに出力
+                configManager.LogConfigurationInfo();
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("Oracle接続の初期化に失敗しました", ex);
+                throw new InvalidOperationException("データベース設定の読み込みに失敗しました", ex);
             }
         }
 
@@ -218,14 +189,27 @@ namespace JobManagementApp.Manager
         #region 接続管理メソッド
 
         /// <summary>
-        /// データベース接続の確立
+        /// データベース接続の確立（デフォルトデータベース）
         /// </summary>
         public bool EstablishConnection()
+        {
+            return EstablishConnection(_currentDatabaseName);
+        }
+
+        /// <summary>
+        /// 指定されたデータベースへの接続を確立
+        /// </summary>
+        public bool EstablishConnection(string databaseName)
         {
             if (_disposed)
             {
                 ErrLogFile.WriteLog("DatabaseManager は既に破棄されています");
                 return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(databaseName))
+            {
+                databaseName = _currentDatabaseName;
             }
 
             lock (_connectionLock)
@@ -238,98 +222,148 @@ namespace JobManagementApp.Manager
                         return false;
                     }
 
-                    // 既に接続済みの場合は健全性チェック
-                    if (_isConnected && IsConnectionHealthy())
+                    if (!_databaseSettings.ContainsKey(databaseName))
                     {
-                        LogFile.WriteLog("データベース接続は既に確立されています");
+                        ErrLogFile.WriteLog($"指定されたデータベース設定が見つかりません: {databaseName}");
+                        return false;
+                    }
+
+                    // 既に接続済みの場合は健全性チェック
+                    if (IsConnectionHealthy(databaseName))
+                    {
+                        LogFile.WriteLog($"データベース接続は既に確立されています: {databaseName}");
                         return true;
                     }
 
                     // 新規接続またはリトライ
-                    return TryConnect();
+                    return TryConnect(databaseName);
                 }
                 catch (Exception ex)
                 {
-                    ErrLogFile.WriteLog($"EstablishConnection エラー: {ex.Message}");
+                    ErrLogFile.WriteLog($"EstablishConnection エラー ({databaseName}): {ex.Message}");
                     return false;
                 }
             }
         }
 
         /// <summary>
-        /// 接続試行
+        /// 指定されたデータベースへの接続試行
         /// </summary>
-        private bool TryConnect()
+        private bool TryConnect(string databaseName)
         {
             try
             {
-                LogFile.WriteLog("データベース接続を開始します");
+                LogFile.WriteLog($"データベース接続を開始します: {databaseName}");
+
+                var dbSettings = _databaseSettings[databaseName];
 
                 // 既存の接続をクローズ
-                CloseConnectionSafely();
+                CloseConnectionSafely(databaseName);
+
+                // 接続文字列を手動で作成
+                var connectionString = BuildConnectionString(dbSettings);
 
                 // 新しい接続を作成
-                _oracleConnection = new OracleConnection(_connectionString);
-                _oracleConnection.Open();
+                var connection = new OracleConnection(connectionString);
+                connection.Open();
 
-                _isConnected = true;
-                _lastConnectionCheck = DateTime.Now;
+                _connections[databaseName] = connection;
+                _connectionStates[databaseName] = true;
+                _lastConnectionChecks[databaseName] = DateTime.Now;
 
-                LogFile.WriteLog("データベース接続が正常に確立されました");
+                LogFile.WriteLog($"データベース接続が正常に確立されました: {databaseName} -> {dbSettings.DataSource}");
                 return true;
             }
             catch (Exception ex)
             {
-                ErrLogFile.WriteLog($"TryConnect エラー: {ex.Message}");
-                _isConnected = false;
+                ErrLogFile.WriteLog($"TryConnect エラー ({databaseName}): {ex.Message}");
+                _connectionStates[databaseName] = false;
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// 接続文字列を手動で構築
+        /// </summary>
+        private string BuildConnectionString(DatabaseSettings dbSettings)
+        {
+            try
+            {
+                // Oracle接続文字列を手動で作成
+                var connectionString = $"Data Source={dbSettings.DataSource};" +
+                                     $"User Id={dbSettings.UserId};" +
+                                     $"Password={dbSettings.Password};" +
+                                     $"Connection Timeout={dbSettings.ConnectionTimeout};" +
+                                     $"Validate Connection=true;" +
+                                     $"Pooling=true;" +
+                                     $"Min Pool Size=1;" +
+                                     $"Max Pool Size=10;";
+
+                LogFile.WriteLog($"接続文字列を生成しました (パスワードは非表示): Data Source={dbSettings.DataSource};User Id={dbSettings.UserId};...");
+                return connectionString;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"接続文字列の構築エラー: {ex.Message}");
+                throw new InvalidOperationException("接続文字列の構築に失敗しました", ex);
             }
         }
 
         /// <summary>
         /// データベース接続の健全性をチェック
         /// </summary>
-        public bool IsConnectionHealthy()
+        public bool IsConnectionHealthy(string databaseName = null)
         {
-            if (_disposed || !_isInitialized || _oracleConnection == null)
+            if (_disposed || !_isInitialized)
+                return false;
+
+            if (string.IsNullOrWhiteSpace(databaseName))
+            {
+                databaseName = _currentDatabaseName;
+            }
+
+            if (!_connections.ContainsKey(databaseName) || !_connectionStates.ContainsKey(databaseName))
                 return false;
 
             try
             {
                 // 定期的な接続チェック（頻繁なチェックを避ける）
-                if (DateTime.Now - _lastConnectionCheck < _connectionCheckInterval)
+                if (DateTime.Now - _lastConnectionChecks[databaseName] < _connectionCheckInterval)
                 {
-                    return _isConnected && _oracleConnection.State == ConnectionState.Open;
+                    return _connectionStates[databaseName] && 
+                           _connections[databaseName]?.State == ConnectionState.Open;
                 }
 
                 lock (_connectionLock)
                 {
+                    var connection = _connections[databaseName];
+                    
                     // 簡単な接続確認クエリを実行
-                    if (_oracleConnection.State != ConnectionState.Open)
+                    if (connection?.State != ConnectionState.Open)
                     {
-                        _isConnected = false;
+                        _connectionStates[databaseName] = false;
                         return false;
                     }
 
-                    using (var cmd = new OracleCommand("SELECT 1 FROM DUAL", _oracleConnection))
+                    using (var cmd = new OracleCommand("SELECT 1 FROM DUAL", connection))
                     {
                         var result = cmd.ExecuteScalar();
-                        _lastConnectionCheck = DateTime.Now;
-                        _isConnected = result != null;
+                        _lastConnectionChecks[databaseName] = DateTime.Now;
+                        _connectionStates[databaseName] = result != null;
                         
-                        if (!_isConnected)
+                        if (!_connectionStates[databaseName])
                         {
-                            ErrLogFile.WriteLog("データベース接続が無効になっています");
+                            ErrLogFile.WriteLog($"データベース接続が無効になっています: {databaseName}");
                         }
                         
-                        return _isConnected;
+                        return _connectionStates[databaseName];
                     }
                 }
             }
             catch (Exception ex)
             {
-                ErrLogFile.WriteLog($"接続状態確認エラー: {ex.Message}");
-                _isConnected = false;
+                ErrLogFile.WriteLog($"接続状態確認エラー ({databaseName}): {ex.Message}");
+                _connectionStates[databaseName] = false;
                 return false;
             }
         }
@@ -337,7 +371,7 @@ namespace JobManagementApp.Manager
         /// <summary>
         /// データベース接続の再確立
         /// </summary>
-        public bool TryReconnect()
+        public bool TryReconnect(string databaseName = null)
         {
             if (_disposed)
             {
@@ -345,32 +379,37 @@ namespace JobManagementApp.Manager
                 return false;
             }
 
+            if (string.IsNullOrWhiteSpace(databaseName))
+            {
+                databaseName = _currentDatabaseName;
+            }
+
             lock (_connectionLock)
             {
                 try
                 {
-                    LogFile.WriteLog("データベース再接続を試行します");
+                    LogFile.WriteLog($"データベース再接続を試行します: {databaseName}");
 
                     // 既存の接続をクローズ
-                    CloseConnectionSafely();
+                    CloseConnectionSafely(databaseName);
 
                     // 新規接続を試行
-                    var result = TryConnect();
+                    var result = TryConnect(databaseName);
                     
                     if (result)
                     {
-                        LogFile.WriteLog("データベース再接続が成功しました");
+                        LogFile.WriteLog($"データベース再接続が成功しました: {databaseName}");
                     }
                     else
                     {
-                        ErrLogFile.WriteLog("データベース再接続に失敗しました");
+                        ErrLogFile.WriteLog($"データベース再接続に失敗しました: {databaseName}");
                     }
                     
                     return result;
                 }
                 catch (Exception ex)
                 {
-                    ErrLogFile.WriteLog($"TryReconnect エラー: {ex.Message}");
+                    ErrLogFile.WriteLog($"TryReconnect エラー ({databaseName}): {ex.Message}");
                     return false;
                 }
             }
@@ -379,28 +418,55 @@ namespace JobManagementApp.Manager
         /// <summary>
         /// 安全な接続クローズ
         /// </summary>
-        private void CloseConnectionSafely()
+        private void CloseConnectionSafely(string databaseName)
         {
             try
             {
-                if (_oracleConnection != null && _isConnected)
+                if (_connections.ContainsKey(databaseName) && _connections[databaseName] != null)
                 {
-                    if (_oracleConnection.State == ConnectionState.Open)
+                    var connection = _connections[databaseName];
+                    if (connection.State == ConnectionState.Open)
                     {
-                        _oracleConnection.Close();
+                        connection.Close();
                     }
-                    _oracleConnection.Dispose();
-                    _oracleConnection = null;
-                    LogFile.WriteLog("データベース接続を安全にクローズしました");
+                    connection.Dispose();
+                    _connections[databaseName] = null;
+                    LogFile.WriteLog($"データベース接続を安全にクローズしました: {databaseName}");
                 }
             }
             catch (Exception ex)
             {
-                ErrLogFile.WriteLog($"接続クローズエラー: {ex.Message}");
+                ErrLogFile.WriteLog($"接続クローズエラー ({databaseName}): {ex.Message}");
             }
             finally
             {
-                _isConnected = false;
+                _connectionStates[databaseName] = false;
+            }
+        }
+
+        /// <summary>
+        /// 現在使用するデータベースを切り替え
+        /// </summary>
+        public bool SwitchDatabase(string databaseName)
+        {
+            try
+            {
+                if (!_databaseSettings.ContainsKey(databaseName))
+                {
+                    ErrLogFile.WriteLog($"指定されたデータベース設定が見つかりません: {databaseName}");
+                    return false;
+                }
+
+                _currentDatabaseName = databaseName;
+                _currentDatabase = _databaseSettings[databaseName];
+
+                LogFile.WriteLog($"使用データベースを切り替えました: {databaseName}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"データベース切り替えエラー: {ex.Message}");
+                return false;
             }
         }
 
@@ -409,20 +475,42 @@ namespace JobManagementApp.Manager
         #region データアクセスメソッド
 
         /// <summary>
-        /// SELECTクエリを実行してDataTableを返す
+        /// SELECTクエリを実行してDataTableを返す（デフォルトDB）
         /// </summary>
         public bool ExecuteSelect(string sql, List<OracleParameter> parameters, ref DataTable dataTable)
         {
-            if (_disposed || !_isConnected || _oracleConnection == null)
+            return ExecuteSelect(sql, parameters, ref dataTable, _currentDatabaseName);
+        }
+
+        /// <summary>
+        /// SELECTクエリを実行してDataTableを返す（指定DB）
+        /// </summary>
+        public bool ExecuteSelect(string sql, List<OracleParameter> parameters, ref DataTable dataTable, string databaseName)
+        {
+            if (_disposed || !_isInitialized)
             {
-                ErrLogFile.WriteLog("データベース接続が無効です");
+                ErrLogFile.WriteLog("DatabaseManager が無効な状態です");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(databaseName))
+            {
+                databaseName = _currentDatabaseName;
+            }
+
+            if (!_connections.ContainsKey(databaseName) || !_connectionStates[databaseName])
+            {
+                ErrLogFile.WriteLog($"データベース接続が無効です: {databaseName}");
                 return false;
             }
 
             try
             {
-                using (var cmd = new OracleCommand(sql, _oracleConnection))
+                var connection = _connections[databaseName];
+                using (var cmd = new OracleCommand(sql, connection))
                 {
+                    cmd.CommandTimeout = _databaseSettings[databaseName].CommandTimeout;
+
                     // パラメータを追加
                     if (parameters != null)
                     {
@@ -436,38 +524,61 @@ namespace JobManagementApp.Manager
                     }
                 }
 
-                LogFile.WriteLog($"SELECT実行成功: {dataTable.Rows.Count}件取得");
+                LogFile.WriteLog($"SELECT実行成功 ({databaseName}): {dataTable.Rows.Count}件取得");
                 return true;
             }
             catch (Exception ex)
             {
-                ErrLogFile.WriteLog($"ExecuteSelect エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"ExecuteSelect エラー ({databaseName}): {ex.Message}");
                 ErrLogFile.WriteLog($"SQL: {sql}");
                 return false;
             }
         }
 
         /// <summary>
-        /// INSERT/UPDATE/DELETEクエリを実行
+        /// INSERT/UPDATE/DELETEクエリを実行（デフォルトDB）
         /// </summary>
         public bool ExecuteNonQuery(string sql, List<OracleParameter> parameters, bool useTransaction = true)
         {
-            if (_disposed || !_isConnected || _oracleConnection == null)
+            return ExecuteNonQuery(sql, parameters, useTransaction, _currentDatabaseName);
+        }
+
+        /// <summary>
+        /// INSERT/UPDATE/DELETEクエリを実行（指定DB）
+        /// </summary>
+        public bool ExecuteNonQuery(string sql, List<OracleParameter> parameters, bool useTransaction, string databaseName)
+        {
+            if (_disposed || !_isInitialized)
             {
-                ErrLogFile.WriteLog("データベース接続が無効です");
+                ErrLogFile.WriteLog("DatabaseManager が無効な状態です");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(databaseName))
+            {
+                databaseName = _currentDatabaseName;
+            }
+
+            if (!_connections.ContainsKey(databaseName) || !_connectionStates[databaseName])
+            {
+                ErrLogFile.WriteLog($"データベース接続が無効です: {databaseName}");
                 return false;
             }
 
             OracleTransaction transaction = null;
             try
             {
+                var connection = _connections[databaseName];
+
                 if (useTransaction)
                 {
-                    transaction = _oracleConnection.BeginTransaction();
+                    transaction = connection.BeginTransaction();
                 }
 
-                using (var cmd = new OracleCommand(sql, _oracleConnection))
+                using (var cmd = new OracleCommand(sql, connection))
                 {
+                    cmd.CommandTimeout = _databaseSettings[databaseName].CommandTimeout;
+
                     if (transaction != null)
                     {
                         cmd.Transaction = transaction;
@@ -486,7 +597,7 @@ namespace JobManagementApp.Manager
                         transaction.Commit();
                     }
 
-                    LogFile.WriteLog($"NonQuery実行成功: {rowsAffected}行影響");
+                    LogFile.WriteLog($"NonQuery実行成功 ({databaseName}): {rowsAffected}行影響");
                     return true;
                 }
             }
@@ -497,15 +608,15 @@ namespace JobManagementApp.Manager
                     try
                     {
                         transaction.Rollback();
-                        LogFile.WriteLog("トランザクションをロールバックしました");
+                        LogFile.WriteLog($"トランザクションをロールバックしました ({databaseName})");
                     }
                     catch (Exception rollbackEx)
                     {
-                        ErrLogFile.WriteLog($"ロールバックエラー: {rollbackEx.Message}");
+                        ErrLogFile.WriteLog($"ロールバックエラー ({databaseName}): {rollbackEx.Message}");
                     }
                 }
 
-                ErrLogFile.WriteLog($"ExecuteNonQuery エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"ExecuteNonQuery エラー ({databaseName}): {ex.Message}");
                 ErrLogFile.WriteLog($"SQL: {sql}");
                 return false;
             }
@@ -516,20 +627,42 @@ namespace JobManagementApp.Manager
         }
 
         /// <summary>
-        /// スカラー値を取得
+        /// スカラー値を取得（デフォルトDB）
         /// </summary>
         public object ExecuteScalar(string sql, List<OracleParameter> parameters)
         {
-            if (_disposed || !_isConnected || _oracleConnection == null)
+            return ExecuteScalar(sql, parameters, _currentDatabaseName);
+        }
+
+        /// <summary>
+        /// スカラー値を取得（指定DB）
+        /// </summary>
+        public object ExecuteScalar(string sql, List<OracleParameter> parameters, string databaseName)
+        {
+            if (_disposed || !_isInitialized)
             {
-                ErrLogFile.WriteLog("データベース接続が無効です");
+                ErrLogFile.WriteLog("DatabaseManager が無効な状態です");
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(databaseName))
+            {
+                databaseName = _currentDatabaseName;
+            }
+
+            if (!_connections.ContainsKey(databaseName) || !_connectionStates[databaseName])
+            {
+                ErrLogFile.WriteLog($"データベース接続が無効です: {databaseName}");
                 return null;
             }
 
             try
             {
-                using (var cmd = new OracleCommand(sql, _oracleConnection))
+                var connection = _connections[databaseName];
+                using (var cmd = new OracleCommand(sql, connection))
                 {
+                    cmd.CommandTimeout = _databaseSettings[databaseName].CommandTimeout;
+
                     // パラメータを追加
                     if (parameters != null)
                     {
@@ -537,13 +670,13 @@ namespace JobManagementApp.Manager
                     }
 
                     var result = cmd.ExecuteScalar();
-                    LogFile.WriteLog($"ExecuteScalar実行成功");
+                    LogFile.WriteLog($"ExecuteScalar実行成功 ({databaseName})");
                     return result;
                 }
             }
             catch (Exception ex)
             {
-                ErrLogFile.WriteLog($"ExecuteScalar エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"ExecuteScalar エラー ({databaseName}): {ex.Message}");
                 ErrLogFile.WriteLog($"SQL: {sql}");
                 return null;
             }
@@ -554,6 +687,22 @@ namespace JobManagementApp.Manager
         #region 統計・監視メソッド
 
         /// <summary>
+        /// 現在のデータベース名を取得
+        /// </summary>
+        public string GetCurrentDatabaseName()
+        {
+            return _currentDatabaseName;
+        }
+
+        /// <summary>
+        /// 利用可能なデータベース名の一覧を取得
+        /// </summary>
+        public IEnumerable<string> GetAvailableDatabaseNames()
+        {
+            return _databaseSettings.Keys.ToArray();
+        }
+
+        /// <summary>
         /// 接続統計情報の取得
         /// </summary>
         public ConnectionStatistics GetConnectionStatistics()
@@ -561,26 +710,42 @@ namespace JobManagementApp.Manager
             return new ConnectionStatistics
             {
                 IsInitialized = _isInitialized,
-                IsConnected = _isConnected,
                 IsDisposed = _disposed,
-                LastConnectionCheck = _lastConnectionCheck,
-                InstanceCreationTime = DateTime.Now // 実際にはインスタンス作成時刻を保存すべき
+                CurrentDatabase = _currentDatabaseName,
+                DatabaseCount = _databaseSettings.Count,
+                ConnectedDatabases = _connectionStates.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToArray(),
+                LastConnectionChecks = new Dictionary<string, DateTime>(_lastConnectionChecks)
             };
         }
 
         /// <summary>
         /// データベース設定情報の取得（機密情報除く）
         /// </summary>
-        public DatabaseConfiguration GetDatabaseConfiguration()
+        public DatabaseConfiguration GetDatabaseConfiguration(string databaseName = null)
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(databaseName))
+                {
+                    databaseName = _currentDatabaseName;
+                }
+
+                if (!_databaseSettings.ContainsKey(databaseName))
+                {
+                    return null;
+                }
+
+                var settings = _databaseSettings[databaseName];
                 return new DatabaseConfiguration
                 {
-                    DataSource = _dataSource,
-                    UserId = _userId,
-                    RetrySleep = _retrySleep,
-                    RetryCount = _retryCount
+                    Name = settings.Name,
+                    DataSource = settings.DataSource,
+                    UserId = settings.UserId,
+                    ConnectionTimeout = settings.ConnectionTimeout,
+                    CommandTimeout = settings.CommandTimeout,
+                    RetrySleep = settings.RetrySleep,
+                    RetryCount = settings.RetryCount,
+                    Description = settings.Description
                     // パスワードは含めない
                 };
             }
@@ -617,8 +782,16 @@ namespace JobManagementApp.Manager
                     {
                         LogFile.WriteLog("DatabaseManager のリソース解放を開始します");
 
-                        // データベース接続のクローズ
-                        CloseConnectionSafely();
+                        // 全てのデータベース接続をクローズ
+                        foreach (var databaseName in _connections.Keys.ToArray())
+                        {
+                            CloseConnectionSafely(databaseName);
+                        }
+
+                        _connections.Clear();
+                        _databaseSettings.Clear();
+                        _connectionStates.Clear();
+                        _lastConnectionChecks.Clear();
 
                         _isInitialized = false;
                         _disposed = true;
@@ -661,10 +834,11 @@ namespace JobManagementApp.Manager
         public class ConnectionStatistics
         {
             public bool IsInitialized { get; set; }
-            public bool IsConnected { get; set; }
             public bool IsDisposed { get; set; }
-            public DateTime LastConnectionCheck { get; set; }
-            public DateTime InstanceCreationTime { get; set; }
+            public string CurrentDatabase { get; set; }
+            public int DatabaseCount { get; set; }
+            public string[] ConnectedDatabases { get; set; }
+            public Dictionary<string, DateTime> LastConnectionChecks { get; set; }
         }
 
         /// <summary>
@@ -672,10 +846,14 @@ namespace JobManagementApp.Manager
         /// </summary>
         public class DatabaseConfiguration
         {
+            public string Name { get; set; }
             public string DataSource { get; set; }
             public string UserId { get; set; }
+            public int ConnectionTimeout { get; set; }
+            public int CommandTimeout { get; set; }
             public int RetrySleep { get; set; }
             public int RetryCount { get; set; }
+            public string Description { get; set; }
         }
 
         #endregion
@@ -702,15 +880,18 @@ namespace JobManagementApp.Manager
             try
             {
                 var stats = GetConnectionStatistics();
-                var config = GetDatabaseConfiguration();
                 
                 LogFile.WriteLog($"DatabaseManager Debug Info:");
                 LogFile.WriteLog($"  Initialized: {stats.IsInitialized}");
-                LogFile.WriteLog($"  Connected: {stats.IsConnected}");
-                LogFile.WriteLog($"  Disposed: {stats.IsDisposed}");
-                LogFile.WriteLog($"  DataSource: {config?.DataSource}");
-                LogFile.WriteLog($"  UserId: {config?.UserId}");
-                LogFile.WriteLog($"  RetryCount: {config?.RetryCount}");
+                LogFile.WriteLog($"  Current Database: {stats.CurrentDatabase}");
+                LogFile.WriteLog($"  Total Databases: {stats.DatabaseCount}");
+                LogFile.WriteLog($"  Connected Databases: {string.Join(", ", stats.ConnectedDatabases)}");
+                
+                foreach (var dbName in GetAvailableDatabaseNames())
+                {
+                    var config = GetDatabaseConfiguration(dbName);
+                    LogFile.WriteLog($"  [{dbName}] {config?.DataSource} (User: {config?.UserId})");
+                }
             }
             catch (Exception ex)
             {
