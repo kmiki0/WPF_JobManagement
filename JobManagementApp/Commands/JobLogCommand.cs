@@ -439,7 +439,7 @@ namespace JobManagementApp.Commands
             }
         }
 
-        
+
         /// <summary>
         /// プロパティを直接更新
         /// </summary>
@@ -450,7 +450,7 @@ namespace JobManagementApp.Commands
             logItem.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
             logItem.ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER;
         }
-        
+
         /// <summary>
         /// テンプレートログを実ファイル情報で直接上書き 
         /// </summary>
@@ -487,15 +487,16 @@ namespace JobManagementApp.Commands
                     LogFile.WriteLog($"FindTemplateLog: 候補 - FileName: {candidate.FileName}, DisplayFileName: {candidate.DisplayFileName}, FileType: {candidate.FileType}");
                 }
                 
-                // 基本ファイル名でテンプレートを検索（重要：baseFileNameを使用）
+                // 修正：FileNameが基本ファイル名と一致するものを「元テンプレート」として扱う
+                // DisplayFileNameの値は問わない（上書き済みでも検索可能）
                 var result = _vm.Logs.FirstOrDefault(x => 
-                    x.FileName == baseFileName &&           // ✅ 基本ファイル名で検索
-                    x.DisplayFileName == baseFileName &&    // ✅ まだテンプレート状態
-                    x.FileType != emFileType.LOG);          // ログファイル以外がマルチファイル対象
+                    x.FileName == baseFileName         // ✅ 基本ファイル名で検索
+                    );       // ログファイル以外がマルチファイル対象
+                    // ❌ DisplayFileName == baseFileName 条件を削除！
                 
                 if (result != null)
                 {
-                    LogFile.WriteLog($"FindTemplateLog: テンプレート見つかりました - {result.FileName}");
+                    LogFile.WriteLog($"FindTemplateLog: テンプレート見つかりました - FileName: {result.FileName}, DisplayFileName: {result.DisplayFileName}");
                 }
                 else
                 {
@@ -520,7 +521,40 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary>
-        /// 既存のファイルログエントリを検索（テンプレートが実ファイル化されている場合も含む）- 詳細ログ版
+        /// 元テンプレートを検索（上書き状態に関係なく）
+        /// </summary>
+        private JobLogItemViewModel FindOriginalTemplate(string baseFileName)
+        {
+            try
+            {
+                LogFile.WriteLog($"FindOriginalTemplate: 検索中 - baseFileName: {baseFileName}");
+                
+                // FileNameが基本ファイル名と一致する最初のエントリを「元テンプレート」とする
+                // 複数ある場合は最初の1件（通常は1件のはず）
+                var result = _vm.Logs.FirstOrDefault(x => 
+                    x.FileName == baseFileName &&
+                    x.FileType != emFileType.LOG);
+                
+                if (result != null)
+                {
+                    LogFile.WriteLog($"FindOriginalTemplate: 元テンプレート見つかりました - FileName: {result.FileName}, DisplayFileName: {result.DisplayFileName}");
+                }
+                else
+                {
+                    LogFile.WriteLog($"FindOriginalTemplate: 元テンプレートが見つかりませんでした");
+                }
+                
+                return result;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"FindOriginalTemplate エラー: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 既存のファイルログエントリを検索（テンプレートが実ファイル化されている場合も含む）- 修正版
         /// </summary>
         private JobLogItemViewModel FindExistingFileLog(JobLogItemViewModel templateLog, string actualFileName)
         {
@@ -529,26 +563,27 @@ namespace JobManagementApp.Commands
                 LogFile.WriteLog($"FindExistingFileLog: 検索開始 - actualFileName: {actualFileName}");
                 LogFile.WriteLog($"FindExistingFileLog: テンプレート情報 - FileName: {templateLog.FileName}, DisplayFileName: {templateLog.DisplayFileName}");
                 
-                // テンプレート自体が既にこの実ファイル名になっている場合
+                // ケース1: テンプレート自体が既にこの実ファイル名になっている場合
                 if (templateLog.DisplayFileName == actualFileName)
                 {
                     LogFile.WriteLog($"FindExistingFileLog: テンプレート自体が既に実ファイル化されています - {actualFileName}");
                     return templateLog;
                 }
 
-                // テンプレート以外で同じ実ファイル名のエントリを検索
+                // ケース2: 同じ基本ファイル名で、同じ実ファイル名の別エントリを検索
+                // （2回目以降に追加されたエントリ）
                 var result = _vm.Logs.FirstOrDefault(x => 
                     x.FileName == templateLog.FileName &&  // 同じ基本ファイル名
                     x.DisplayFileName == actualFileName &&  // 同じ実ファイル名
-                    x != templateLog);                       // テンプレート以外
+                    x != templateLog);                       // テンプレート（元エントリ）以外
 
                 if (result != null)
                 {
-                    LogFile.WriteLog($"FindExistingFileLog: 既存エントリが見つかりました - {actualFileName}");
+                    LogFile.WriteLog($"FindExistingFileLog: 既存の追加エントリが見つかりました - {actualFileName}");
                 }
                 else
                 {
-                    LogFile.WriteLog($"FindExistingFileLog: 既存エントリが見つかりませんでした - {actualFileName}");
+                    LogFile.WriteLog($"FindExistingFileLog: 既存エントリが見つかりませんでした - {actualFileName}（新規エントリとして処理）");
                 }
 
                 return result;
