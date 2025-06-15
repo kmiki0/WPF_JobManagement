@@ -283,6 +283,23 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary>
+        /// UIスレッドセーフな更新を実行
+        /// </summary>
+        private void InvokeOnUIThread(Action action)
+        {
+            if (Application.Current.Dispatcher.CheckAccess())
+            {
+                // 既にUIスレッドの場合は直接実行
+                action();
+            }
+            else
+            {
+                // UIスレッド以外からの場合はDispatcher経由
+                Application.Current.Dispatcher.Invoke(action);
+            }
+        }
+
+        /// <summary>
         /// シングルファイルの進行状況処理
         /// </summary>
         private void HandleSingleFileProgress(FileWatchingInfo watchingInfo, string filePath, string destPath, int totalSize, int percent)
@@ -296,12 +313,12 @@ namespace JobManagementApp.Commands
                 {
                     LogFile.WriteLog($"HandleSingleFileProgress: テンプレートログ見つかりました - {templateLog.FileName}");
                     
-                    Application.Current.Dispatcher.Invoke(() =>
+                    InvokeOnUIThread(() =>
                     {
                         // コピー先フォルダパスを設定
                         _vm.ToCopyFolderPath = Path.GetDirectoryName(destPath);
                         
-                        UpdateLogItemUI(templateLog, filePath, destPath, totalSize, percent);
+                        UpdateLogItemUIDirectly(templateLog, filePath, destPath, totalSize, percent);
                         LogFile.WriteLog($"HandleSingleFileProgress: UI更新完了 - {percent}%");
                     });
                 }
@@ -317,7 +334,7 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary>
-        /// マルチファイルの進行状況処理 - デバッグ強化版
+        /// マルチファイルの進行状況処理 - UIスレッド修正版
         /// </summary>
         private void HandleMultiFileProgress(FileWatchingInfo watchingInfo, string filePath, string destPath, int totalSize, int percent)
         {
@@ -325,7 +342,7 @@ namespace JobManagementApp.Commands
             {
                 LogFile.WriteLog($"HandleMultiFileProgress: 開始 - {filePath}");
                 
-                Application.Current.Dispatcher.Invoke(() =>
+                InvokeOnUIThread(() =>
                 {
                     // コピー先フォルダパスを設定
                     _vm.ToCopyFolderPath = Path.GetDirectoryName(destPath);
@@ -343,14 +360,17 @@ namespace JobManagementApp.Commands
                     var actualFileName = Path.GetFileName(filePath);
                     var baseFileName = ExtractBaseFileName(actualFileName);
 
-                    LogFile.WriteLog($"HandleMultiFileProgress: ファイル名 - 実際: {actualFileName}, 基本: {baseFileName}");
+                    LogFile.WriteLog($"HandleMultiFileProgress: ファイル名 - 実際: {actualFileName}, 基本: {baseFileName}, テンプレート: {templateLog.FileName}");
 
                     // このファイルが元のテンプレートファイル名と一致するかチェック
+                    // 重要：baseFileNameとtemplateLog.FileNameを比較
                     if (!baseFileName.Equals(templateLog.FileName, StringComparison.OrdinalIgnoreCase))
                     {
                         LogFile.WriteLog($"HandleMultiFileProgress: ファイル名が一致しません - 基本: {baseFileName}, テンプレート: {templateLog.FileName}");
                         return;
                     }
+
+                    LogFile.WriteLog($"HandleMultiFileProgress: ファイル名一致確認OK - 処理を続行します");
 
                     // この実ファイルが既に処理されているかチェック
                     var existingFileLog = FindExistingFileLog(templateLog, actualFileName);
@@ -359,7 +379,7 @@ namespace JobManagementApp.Commands
                     {
                         LogFile.WriteLog($"HandleMultiFileProgress: 既存エントリを更新 - {actualFileName}");
                         // 既存エントリを更新
-                        UpdateLogItemUI(existingFileLog, filePath, destPath, totalSize, percent);
+                        UpdateLogItemUIDirectly(existingFileLog, filePath, destPath, totalSize, percent);
                         
                         if (percent >= 100)
                         {
@@ -373,7 +393,7 @@ namespace JobManagementApp.Commands
                         {
                             LogFile.WriteLog($"HandleMultiFileProgress: テンプレートを上書き - {actualFileName}");
                             // 初回検出：テンプレートを実ファイル情報で上書き
-                            OverwriteTemplateWithActualFile(templateLog, filePath, destPath, totalSize, percent);
+                            OverwriteTemplateWithActualFileDirectly(templateLog, filePath, destPath, totalSize, percent);
                             
                             if (percent >= 100)
                             {
@@ -391,22 +411,19 @@ namespace JobManagementApp.Commands
                                 newFileLog.LineCount = GetLineCount(destPath, newFileLog).ToString() + " 件";
                             }
 
-                            var logList = _vm.Logs.ToList();
-                            // テンプレートの次に挿入
-                            var templateIndex = logList.IndexOf(templateLog);
-                            if (templateIndex >= 0)
+                            // ObservableCollectionに直接追加（より効率的）
+                            var templateIndex = _vm.Logs.IndexOf(templateLog);
+                            if (templateIndex >= 0 && templateIndex + 1 < _vm.Logs.Count)
                             {
-                                logList.Insert(templateIndex + 1, newFileLog);
+                                _vm.Logs.Insert(templateIndex + 1, newFileLog);
                                 LogFile.WriteLog($"HandleMultiFileProgress: テンプレートの次に挿入 (インデックス: {templateIndex + 1})");
                             }
                             else
                             {
-                                logList.Add(newFileLog);
+                                _vm.Logs.Add(newFileLog);
                                 LogFile.WriteLog($"HandleMultiFileProgress: リストの最後に追加");
                             }
                             
-                            // ObservableCollectionを更新
-                            _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
                             LogFile.WriteLog($"HandleMultiFileProgress: ObservableCollection更新完了 (合計: {_vm.Logs.Count}件)");
                         }
                     }
@@ -423,14 +440,17 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary>
-        /// テンプレートログを検索 - デバッグ強化版
+        /// テンプレートログを検索 - 修正版（基本ファイル名で検索）
         /// </summary>
         private JobLogItemViewModel FindTemplateLog(LogInfo logInfo)
         {
             try
             {
-                var baseFileName = Path.GetFileName(logInfo.LogFromPath);
-                LogFile.WriteLog($"FindTemplateLog: 検索中 - baseFileName: {baseFileName}");
+                // 実際のファイルパスから基本ファイル名を抽出
+                var actualFileName = Path.GetFileName(logInfo.LogFromPath); // "20250616120000_sample.tsv"
+                var baseFileName = ExtractBaseFileName(actualFileName);     // "sample.tsv"
+                
+                LogFile.WriteLog($"FindTemplateLog: 検索中 - actualFileName: {actualFileName}, baseFileName: {baseFileName}");
                 
                 var candidates = _vm.Logs.Where(x => x.FileName == baseFileName).ToList();
                 LogFile.WriteLog($"FindTemplateLog: 候補件数 - {candidates.Count}件");
@@ -440,10 +460,11 @@ namespace JobManagementApp.Commands
                     LogFile.WriteLog($"FindTemplateLog: 候補 - FileName: {candidate.FileName}, DisplayFileName: {candidate.DisplayFileName}, FileType: {candidate.FileType}");
                 }
                 
+                // 基本ファイル名でテンプレートを検索（重要：baseFileNameを使用）
                 var result = _vm.Logs.FirstOrDefault(x => 
-                    x.FileName == baseFileName && 
-                    x.DisplayFileName == baseFileName &&
-                    x.FileType != emFileType.LOG); // ログファイル以外がマルチファイル対象
+                    x.FileName == baseFileName &&           // ✅ 基本ファイル名で検索
+                    x.DisplayFileName == baseFileName &&    // ✅ まだテンプレート状態
+                    x.FileType != emFileType.LOG);          // ログファイル以外がマルチファイル対象
                 
                 if (result != null)
                 {
@@ -452,6 +473,14 @@ namespace JobManagementApp.Commands
                 else
                 {
                     LogFile.WriteLog($"FindTemplateLog: テンプレートが見つかりませんでした");
+                    
+                    // デバッグ用：全てのLogsを出力
+                    LogFile.WriteLog("FindTemplateLog: 現在のLogs一覧:");
+                    for (int i = 0; i < _vm.Logs.Count; i++)
+                    {
+                        var log = _vm.Logs[i];
+                        LogFile.WriteLog($"  [{i}] FileName: {log.FileName}, DisplayFileName: {log.DisplayFileName}, FileType: {log.FileType}");
+                    }
                 }
                 
                 return result;
@@ -464,30 +493,65 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary>
-        /// 既存のファイルログエントリを検索（テンプレートが実ファイル化されている場合も含む）
+        /// 既存のファイルログエントリを検索（テンプレートが実ファイル化されている場合も含む）- 詳細ログ版
         /// </summary>
         private JobLogItemViewModel FindExistingFileLog(JobLogItemViewModel templateLog, string actualFileName)
         {
-            // テンプレート自体が既にこの実ファイル名になっている場合
-            if (templateLog.DisplayFileName == actualFileName)
+            try
             {
-                return templateLog;
-            }
+                LogFile.WriteLog($"FindExistingFileLog: 検索開始 - actualFileName: {actualFileName}");
+                LogFile.WriteLog($"FindExistingFileLog: テンプレート情報 - FileName: {templateLog.FileName}, DisplayFileName: {templateLog.DisplayFileName}");
+                
+                // テンプレート自体が既にこの実ファイル名になっている場合
+                if (templateLog.DisplayFileName == actualFileName)
+                {
+                    LogFile.WriteLog($"FindExistingFileLog: テンプレート自体が既に実ファイル化されています - {actualFileName}");
+                    return templateLog;
+                }
 
-            // テンプレート以外で同じ実ファイル名のエントリを検索
-            return _vm.Logs.FirstOrDefault(x => 
-                x.FileName == templateLog.FileName && 
-                x.DisplayFileName == actualFileName &&
-                x != templateLog);
+                // テンプレート以外で同じ実ファイル名のエントリを検索
+                var result = _vm.Logs.FirstOrDefault(x => 
+                    x.FileName == templateLog.FileName &&  // 同じ基本ファイル名
+                    x.DisplayFileName == actualFileName &&  // 同じ実ファイル名
+                    x != templateLog);                       // テンプレート以外
+
+                if (result != null)
+                {
+                    LogFile.WriteLog($"FindExistingFileLog: 既存エントリが見つかりました - {actualFileName}");
+                }
+                else
+                {
+                    LogFile.WriteLog($"FindExistingFileLog: 既存エントリが見つかりませんでした - {actualFileName}");
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"FindExistingFileLog エラー: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
-        /// テンプレートがまだ実ファイルで上書きされていないかチェック
+        /// テンプレートがまだ実ファイルで上書きされていないかチェック - 詳細ログ版
         /// </summary>
         private bool IsTemplateNotYetOverwritten(JobLogItemViewModel templateLog)
         {
-            // DisplayFileNameとFileNameが同じ場合は、まだテンプレート状態
-            return templateLog.DisplayFileName == templateLog.FileName;
+            try
+            {
+                // DisplayFileNameとFileNameが同じ場合は、まだテンプレート状態
+                bool isTemplate = templateLog.DisplayFileName == templateLog.FileName;
+                
+                LogFile.WriteLog($"IsTemplateNotYetOverwritten: FileName: {templateLog.FileName}, DisplayFileName: {templateLog.DisplayFileName}, IsTemplate: {isTemplate}");
+                
+                return isTemplate;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"IsTemplateNotYetOverwritten エラー: {ex.Message}");
+                return true; // エラー時は安全側でテンプレート状態とみなす
+            }
         }
 
         /// <summary>
@@ -545,13 +609,56 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary>
-        /// 基本ファイル名を抽出（日付プレフィックスを除去）
+        /// 基本ファイル名を抽出（日付プレフィックスを除去）- 強化版
         /// </summary>
         private string ExtractBaseFileName(string fileName)
         {
-            // yyyymmddhhmmss_ファイル名.拡張子 から ファイル名.拡張子 を抽出
-            var match = Regex.Match(fileName, @"^\d{14}_?(.+)$");
-            return match.Success ? match.Groups[1].Value : fileName;
+            try
+            {
+                LogFile.WriteLog($"ExtractBaseFileName: 入力 - {fileName}");
+                
+                if (string.IsNullOrEmpty(fileName))
+                {
+                    LogFile.WriteLog("ExtractBaseFileName: ファイル名が空です");
+                    return fileName;
+                }
+
+                // パターン1: yyyymmddhhmmss_ファイル名.拡張子
+                var match1 = Regex.Match(fileName, @"^\d{14}_(.+)$");
+                if (match1.Success)
+                {
+                    var result = match1.Groups[1].Value;
+                    LogFile.WriteLog($"ExtractBaseFileName: パターン1一致 - 結果: {result}");
+                    return result;
+                }
+
+                // パターン2: yyyymmddhhmmssファイル名.拡張子（アンダーバーなし）
+                var match2 = Regex.Match(fileName, @"^\d{14}(.+)$");
+                if (match2.Success)
+                {
+                    var result = match2.Groups[1].Value;
+                    LogFile.WriteLog($"ExtractBaseFileName: パターン2一致 - 結果: {result}");
+                    return result;
+                }
+
+                // パターン3: yyyymmdd_ファイル名.拡張子（8桁日付）
+                var match3 = Regex.Match(fileName, @"^\d{8}_(.+)$");
+                if (match3.Success)
+                {
+                    var result = match3.Groups[1].Value;
+                    LogFile.WriteLog($"ExtractBaseFileName: パターン3一致 - 結果: {result}");
+                    return result;
+                }
+
+                // どのパターンにも一致しない場合は元のファイル名をそのまま返す
+                LogFile.WriteLog($"ExtractBaseFileName: パターン不一致 - 元のファイル名を返す: {fileName}");
+                return fileName;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ExtractBaseFileName エラー: {ex.Message}");
+                return fileName; // エラー時は元のファイル名を返す
+            }
         }
 
         /// <summary>
