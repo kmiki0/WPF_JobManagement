@@ -439,6 +439,33 @@ namespace JobManagementApp.Commands
             }
         }
 
+        
+        /// <summary>
+        /// プロパティを直接更新
+        /// </summary>
+        private void UpdateLogItemUIDirectly(JobLogItemViewModel logItem, string filePath, string destPath, int totalSize, int percent)
+        {
+            logItem.Size = totalSize.ToString("N0") + " KB";
+            logItem.CopyPercent = percent.ToString() + " %";
+            logItem.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
+            logItem.ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER;
+        }
+        
+        /// <summary>
+        /// テンプレートログを実ファイル情報で直接上書き 
+        /// </summary>
+        private void OverwriteTemplateWithActualFileDirectly(JobLogItemViewModel templateLog, string filePath, string destPath, int totalSize, int percent)
+        {
+            var actualFileName = Path.GetFileName(filePath);
+            
+            // テンプレートの基本情報は保持し、実ファイル固有の情報のみ更新
+            templateLog.DisplayFileName = actualFileName;
+            templateLog.Size = totalSize.ToString("N0") + " KB";
+            templateLog.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
+            templateLog.CopyPercent = percent.ToString() + " %";
+            templateLog.ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER;
+        }
+
         /// <summary>
         /// テンプレートログを検索 - 修正版（基本ファイル名で検索）
         /// </summary>
