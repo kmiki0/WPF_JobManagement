@@ -46,9 +46,6 @@
     <Reference Include="ACmnLog">
       <HintPath>..\bin\ACmnLog.dll</HintPath>
     </Reference>
-    <Reference Include="ACmnOra">
-      <HintPath>..\bin\ACmnOra.dll</HintPath>
-    </Reference>
     <Reference Include="BaseLibrary">
       <HintPath>..\bin\BaseLibrary.dll</HintPath>
     </Reference>
@@ -72,6 +69,10 @@
     </Reference>
     <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions, Version=9.0.0.5, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Extensions.DependencyInjection.Abstractions.9.0.5\lib\net462\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
+    </Reference>
+    <!-- Oracle.ManagedDataAccess参照を追加 -->
+    <Reference Include="Oracle.ManagedDataAccess, Version=4.122.21.1, Culture=neutral, PublicKeyToken=89b483f429c47342, processorArchitecture=MSIL">
+      <HintPath>..\packages\Oracle.ManagedDataAccess.21.11.0\lib\net40\Oracle.ManagedDataAccess.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />

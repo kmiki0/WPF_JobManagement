@@ -14,8 +14,7 @@ using System.Runtime.InteropServices;
 namespace JobManagementApp
 {
     /// <summary>
-    /// アプリケーションクラス - 完全版安全性修正
-    /// グローバル例外処理、リソース管理、ログ機能を強化
+    /// アプリケーションクラス
     /// </summary>
     public partial class App : Application
     {
@@ -89,7 +88,7 @@ namespace JobManagementApp
                 // 依存性注入設定
                 ConfigureServices();
 
-                // データベース初期化
+                // データベース初期化（簡潔に）
                 InitializeDatabase();
 
                 // アプリケーション設定
@@ -293,7 +292,7 @@ namespace JobManagementApp
         }
 
         /// <summary>
-        /// データベース初期化
+        /// データベース初期化 - DatabaseManagerに責任を集約
         /// </summary>
         private void InitializeDatabase()
         {
@@ -301,6 +300,7 @@ namespace JobManagementApp
             {
                 LogFile.WriteLog("データベース初期化を開始します");
 
+                // DatabaseManagerが全ての責任を負う
                 var databaseManager = DatabaseManager.Instance;
                 
                 if (databaseManager == null)
@@ -308,21 +308,10 @@ namespace JobManagementApp
                     throw new InvalidOperationException("DatabaseManagerの取得に失敗しました");
                 }
 
-                // 接続確立
+                // 接続確立（DatabaseManager内で健全性チェックも含む）
                 if (!databaseManager.EstablishConnection())
                 {
                     throw new InvalidOperationException("データベース接続の確立に失敗しました");
-                }
-
-                // 接続状態の確認
-                if (!databaseManager.IsConnectionHealthy())
-                {
-                    LogFile.WriteLog("データベース接続の再試行を実行します");
-                    
-                    if (!databaseManager.TryReconnect())
-                    {
-                        throw new InvalidOperationException("データベース再接続に失敗しました");
-                    }
                 }
 
                 LogFile.WriteLog("データベース初期化が完了しました");
@@ -378,7 +367,7 @@ namespace JobManagementApp
                 // FileWatcherManagerの解放
                 CleanupFileWatcherManager();
 
-                // DatabaseManagerの解放
+                // DatabaseManagerの解放（簡潔に）
                 CleanupDatabaseManager();
 
                 // ServiceProviderの解放
@@ -449,21 +438,15 @@ namespace JobManagementApp
         }
 
         /// <summary>
-        /// DatabaseManagerのクリーンアップ
+        /// DatabaseManagerのクリーンアップ - 簡潔に
         /// </summary>
         private void CleanupDatabaseManager()
         {
             try
             {
-                var databaseManager = DatabaseManager.Instance;
-                if (databaseManager != null)
-                {
-                    if (databaseManager is IDisposable disposableDb)
-                    {
-                        disposableDb.Dispose();
-                        LogFile.WriteLog("DatabaseManagerを解放しました");
-                    }
-                }
+                // DatabaseManager自体が適切にDispose処理を行う
+                DatabaseManager.Instance?.Dispose();
+                LogFile.WriteLog("DatabaseManagerを解放しました");
             }
             catch (Exception ex)
             {

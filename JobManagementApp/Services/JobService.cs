@@ -6,11 +6,13 @@ using System.Text;
 using System.Threading.Tasks;
 using JobManagementApp.Manager;
 using JobManagementApp.Models;
+using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 
 namespace JobManagementApp.Services
 {
     /// <summary>
-    /// SQLまとめ
+    /// SQLまとめ - Oracle.ManagedDataAccess.Client対応版
     /// </summary>
     public static class JobService
     {
@@ -54,9 +56,9 @@ namespace JobManagementApp.Services
                             JOB_M.EDA
                         FROM L1_UNYOCTL UNYO 
                         LEFT JOIN JOB_MANEGMENT JOB_M ON UNYO.JOBID = JOB_M.ID 
-                        WHERE UNYO.UPDDT BETWEEN TO_DATE({0}, 'YYYY/MM/DD HH24:MI') 
-                                            AND TO_DATE({1}, 'YYYY/MM/DD HH24:MI')
-                        AND ({2})
+                        WHERE UNYO.UPDDT BETWEEN TO_DATE(:fromDate, 'YYYY/MM/DD HH24:MI') 
+                                            AND TO_DATE(:toDate, 'YYYY/MM/DD HH24:MI')
+                        AND ({0})
                         GROUP BY UNYO.JOBID, JOB_M.SCENARIO, JOB_M.EDA
                     )
                     SELECT 
@@ -69,14 +71,14 @@ namespace JobManagementApp.Services
                     INNER JOIN JOBID_UPDDT JU ON UNYO.JOBID = JU.JOBID 
                                             AND UNYO.UPDDT = JU.UPDDT";
 
-                var conditionParts = new List<string>();
-                var sqlParameters = new List<string>();
-
-                // 日付パラメータを追加
-                sqlParameters.Add($"'{EscapeForSql(fromDate)}'");
-                sqlParameters.Add($"'{EscapeForSql(toDate)}'");
+                var parameters = new List<OracleParameter>
+                {
+                    new OracleParameter("fromDate", OracleDbType.Varchar2, fromDate, ParameterDirection.Input),
+                    new OracleParameter("toDate", OracleDbType.Varchar2, toDate, ParameterDirection.Input)
+                };
 
                 // 動的条件を構築
+                var conditionParts = new List<string>();
                 for (int i = 0; i < args.Count; i++)
                 {
                     var scenario = args[i].Scenario?.Trim() ?? "";
@@ -89,11 +91,13 @@ namespace JobManagementApp.Services
                         continue;
                     }
 
-                    // 直接値を埋め込む方式に変更（安全にエスケープ済み）
-                    var safeScenario = EscapeForSql(scenario);
-                    var safeEda = EscapeForSql(eda);
+                    var scenarioParam = $"scenario{i}";
+                    var edaParam = $"eda{i}";
                     
-                    conditionParts.Add($"(JOB_M.SCENARIO = '{safeScenario}' AND JOB_M.EDA = '{safeEda}')");
+                    conditionParts.Add($"(JOB_M.SCENARIO = :{scenarioParam} AND JOB_M.EDA = :{edaParam})");
+                    
+                    parameters.Add(new OracleParameter(scenarioParam, OracleDbType.Varchar2, scenario, ParameterDirection.Input));
+                    parameters.Add(new OracleParameter(edaParam, OracleDbType.Varchar2, eda, ParameterDirection.Input));
                 }
 
                 if (conditionParts.Count == 0)
@@ -102,13 +106,10 @@ namespace JobManagementApp.Services
                     return new DataTable();
                 }
 
-                // 条件部分を追加
-                sqlParameters.Add(string.Join(" OR ", conditionParts));
-
                 // 最終的なSQLを構築
-                var finalSql = string.Format(sql, sqlParameters.ToArray());
+                var finalSql = string.Format(sql, string.Join(" OR ", conditionParts));
 
-                if (!ExecuteParameterizedQuery(finalSql, new List<(string name, object value)>(), ref dt))
+                if (!DatabaseManager.Instance.ExecuteSelect(finalSql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -150,13 +151,13 @@ namespace JobManagementApp.Services
                         AND JOB_M.EDA = :eda
                     )";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", scenario.Trim()),
-                    ("eda", eda.Trim())
+                    new OracleParameter("scenario", OracleDbType.Varchar2, scenario.Trim(), ParameterDirection.Input),
+                    new OracleParameter("eda", OracleDbType.Varchar2, eda.Trim(), ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedCommand(sql, parameters))
+                if (!DatabaseManager.Instance.ExecuteNonQuery(sql, parameters))
                 {
                     throw new Exception("運用処理管理Rの更新に失敗しました");
                 }
@@ -198,12 +199,12 @@ namespace JobManagementApp.Services
                     AND RRSJFLG = 0
                     GROUP BY SCENARIO";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", scenario.Trim())
+                    new OracleParameter("scenario", OracleDbType.Varchar2, scenario.Trim(), ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                if (!DatabaseManager.Instance.ExecuteSelect(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -244,13 +245,13 @@ namespace JobManagementApp.Services
                     AND SCENARIO = :scenario 
                     AND EDA = :eda";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", scenario.Trim()),
-                    ("eda", eda.Trim())
+                    new OracleParameter("scenario", OracleDbType.Varchar2, scenario.Trim(), ParameterDirection.Input),
+                    new OracleParameter("eda", OracleDbType.Varchar2, eda.Trim(), ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                if (!DatabaseManager.Instance.ExecuteSelect(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -301,23 +302,23 @@ namespace JobManagementApp.Services
                         INSERT (SCENARIO, EDA, ID, NAME, EXECUTION, EXECCOMMNAD, STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO, RRSJFLG)
                         VALUES (:scenario, :eda, :id, :name, :execution, :execcommnad, :status, :beforejob, :jobboolean, :receive, :send, :memo, 0)";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", job.SCENARIO?.Trim() ?? ""),
-                    ("eda", job.EDA?.Trim() ?? ""),
-                    ("id", job.ID?.Trim() ?? ""),
-                    ("name", job.NAME?.Trim() ?? ""),
-                    ("execution", job.EXECUTION),
-                    ("execcommnad", job.EXECCOMMNAD?.Trim() ?? ""),
-                    ("status", job.STATUS),
-                    ("beforejob", job.BEFOREJOB?.Trim() ?? ""),
-                    ("jobboolean", job.JOBBOOLEAN),
-                    ("receive", job.RECEIVE?.Trim() ?? ""),
-                    ("send", job.SEND?.Trim() ?? ""),
-                    ("memo", job.MEMO?.Trim() ?? "")
+                    new OracleParameter("scenario", OracleDbType.Varchar2, job.SCENARIO?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("eda", OracleDbType.Varchar2, job.EDA?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("id", OracleDbType.Varchar2, job.ID?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("name", OracleDbType.Varchar2, job.NAME?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("execution", OracleDbType.Int32, job.EXECUTION, ParameterDirection.Input),
+                    new OracleParameter("execcommnad", OracleDbType.Varchar2, job.EXECCOMMNAD?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("status", OracleDbType.Int32, job.STATUS, ParameterDirection.Input),
+                    new OracleParameter("beforejob", OracleDbType.Varchar2, job.BEFOREJOB?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("jobboolean", OracleDbType.Int32, job.JOBBOOLEAN, ParameterDirection.Input),
+                    new OracleParameter("receive", OracleDbType.Varchar2, job.RECEIVE?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("send", OracleDbType.Varchar2, job.SEND?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("memo", OracleDbType.Varchar2, job.MEMO?.Trim() ?? "", ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedCommand(sql, parameters))
+                if (!DatabaseManager.Instance.ExecuteNonQuery(sql, parameters))
                 {
                     throw new Exception("ジョブ管理の更新に失敗しました");
                 }
@@ -354,13 +355,13 @@ namespace JobManagementApp.Services
                     AND EDA = :eda
                     AND RRSJFLG = 0";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", scenario.Trim()),
-                    ("eda", eda.Trim())
+                    new OracleParameter("scenario", OracleDbType.Varchar2, scenario.Trim(), ParameterDirection.Input),
+                    new OracleParameter("eda", OracleDbType.Varchar2, eda.Trim(), ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedCommand(sql, parameters))
+                if (!DatabaseManager.Instance.ExecuteNonQuery(sql, parameters))
                 {
                     throw new Exception("ジョブ管理の削除に失敗しました");
                 }
@@ -402,9 +403,9 @@ namespace JobManagementApp.Services
                     AND LENGTH(TRIM(SEND)) > 0
                     ORDER BY Type, VAL";
 
-                var parameters = new List<(string name, object value)>();
+                var parameters = new List<OracleParameter>();
 
-                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                if (!DatabaseManager.Instance.ExecuteSelect(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -460,15 +461,15 @@ namespace JobManagementApp.Services
                     AND JL.FILENAME = :filename
                     AND JL.FILEPATH = :filepath";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", scenario.Trim()),
-                    ("eda", eda.Trim()),
-                    ("filename", fileName.Trim()),
-                    ("filepath", filePath.Trim())
+                    new OracleParameter("scenario", OracleDbType.Varchar2, scenario.Trim(), ParameterDirection.Input),
+                    new OracleParameter("eda", OracleDbType.Varchar2, eda.Trim(), ParameterDirection.Input),
+                    new OracleParameter("filename", OracleDbType.Varchar2, fileName.Trim(), ParameterDirection.Input),
+                    new OracleParameter("filepath", OracleDbType.Varchar2, filePath.Trim(), ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                if (!DatabaseManager.Instance.ExecuteSelect(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -518,13 +519,13 @@ namespace JobManagementApp.Services
                     AND JL.EDA = :eda 
                     ORDER BY JL.FILETYPE, JL.FILENAME";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", scenario.Trim()),
-                    ("eda", eda.Trim())
+                    new OracleParameter("scenario", OracleDbType.Varchar2, scenario.Trim(), ParameterDirection.Input),
+                    new OracleParameter("eda", OracleDbType.Varchar2, eda.Trim(), ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                if (!DatabaseManager.Instance.ExecuteSelect(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -562,18 +563,18 @@ namespace JobManagementApp.Services
                         :scenario, :eda, :filename, :filepath, :filetype, :filecount, :observertype
                     )";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", job.SCENARIO?.Trim() ?? ""),
-                    ("eda", job.EDA?.Trim() ?? ""),
-                    ("filename", job.FILENAME?.Trim() ?? ""),
-                    ("filepath", job.FILEPATH?.Trim() ?? ""),
-                    ("filetype", job.FILETYPE),
-                    ("filecount", job.FILECOUNT),
-                    ("observertype", job.OBSERVERTYPE)
+                    new OracleParameter("scenario", OracleDbType.Varchar2, job.SCENARIO?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("eda", OracleDbType.Varchar2, job.EDA?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("filename", OracleDbType.Varchar2, job.FILENAME?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("filepath", OracleDbType.Varchar2, job.FILEPATH?.Trim() ?? "", ParameterDirection.Input),
+                    new OracleParameter("filetype", OracleDbType.Int32, job.FILETYPE, ParameterDirection.Input),
+                    new OracleParameter("filecount", OracleDbType.Int32, job.FILECOUNT, ParameterDirection.Input),
+                    new OracleParameter("observertype", OracleDbType.Int32, job.OBSERVERTYPE, ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedCommand(sql, parameters))
+                if (!DatabaseManager.Instance.ExecuteNonQuery(sql, parameters))
                 {
                     throw new Exception("ジョブ関連ファイルの登録に失敗しました");
                 }
@@ -610,15 +611,15 @@ namespace JobManagementApp.Services
                     AND FILENAME = :oldfilename
                     AND FILEPATH = :oldfilepath";
 
-                var parameters = new List<(string name, object value)>
+                var parameters = new List<OracleParameter>
                 {
-                    ("scenario", job.SCENARIO.Trim()),
-                    ("eda", job.EDA.Trim()),
-                    ("oldfilename", job.OLDFILENAME.Trim()),
-                    ("oldfilepath", job.OLDFILEPATH.Trim())
+                    new OracleParameter("scenario", OracleDbType.Varchar2, job.SCENARIO.Trim(), ParameterDirection.Input),
+                    new OracleParameter("eda", OracleDbType.Varchar2, job.EDA.Trim(), ParameterDirection.Input),
+                    new OracleParameter("oldfilename", OracleDbType.Varchar2, job.OLDFILENAME.Trim(), ParameterDirection.Input),
+                    new OracleParameter("oldfilepath", OracleDbType.Varchar2, job.OLDFILEPATH.Trim(), ParameterDirection.Input)
                 };
 
-                if (!ExecuteParameterizedCommand(sql, parameters))
+                if (!DatabaseManager.Instance.ExecuteNonQuery(sql, parameters))
                 {
                     throw new Exception("ジョブ関連ファイルの削除に失敗しました");
                 }
@@ -665,19 +666,19 @@ namespace JobManagementApp.Services
                                                    AND JOB_M.EDA = JOB_O.EDA 
                     WHERE JOB_M.RRSJFLG = 0";
 
-                var parameters = new List<(string name, object value)>();
+                var parameters = new List<OracleParameter>();
 
                 // ユーザーが設定されている場合、条件追加
                 if (!string.IsNullOrWhiteSpace(userId) && IsValidUserId(userId))
                 {
                     sql += " AND JOB_O.USERID = :userid";
-                    parameters.Add(("userid", userId.Trim()));
+                    parameters.Add(new OracleParameter("userid", OracleDbType.Varchar2, userId.Trim(), ParameterDirection.Input));
                 }
 
                 sql += @"
                     ORDER BY JOB_M.SCENARIO, JOB_M.EDA";
 
-                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                if (!DatabaseManager.Instance.ExecuteSelect(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -721,7 +722,7 @@ namespace JobManagementApp.Services
                                                    AND JOB_M.EDA = JOB_O.EDA 
                     WHERE JOB_M.RRSJFLG = 0";
 
-                var parameters = new List<(string name, object value)>();
+                var parameters = new List<OracleParameter>();
 
                 // 条件　シナリオ (複数検索)
                 if (!string.IsNullOrWhiteSpace(scenario))
@@ -738,7 +739,7 @@ namespace JobManagementApp.Services
                         {
                             var paramName = $"scenario{i}";
                             scenarioConditions.Add($"JOB_M.SCENARIO = :{paramName}");
-                            parameters.Add((paramName, scenarios[i]));
+                            parameters.Add(new OracleParameter(paramName, OracleDbType.Varchar2, scenarios[i], ParameterDirection.Input));
                         }
                         sql += $" AND ({string.Join(" OR ", scenarioConditions)})";
                     }
@@ -759,7 +760,7 @@ namespace JobManagementApp.Services
                         {
                             var paramName = $"jobid{i}";
                             jobIdConditions.Add($"JOB_M.ID = :{paramName}");
-                            parameters.Add((paramName, jobIds[i]));
+                            parameters.Add(new OracleParameter(paramName, OracleDbType.Varchar2, jobIds[i], ParameterDirection.Input));
                         }
                         sql += $" AND ({string.Join(" OR ", jobIdConditions)})";
                     }
@@ -769,19 +770,19 @@ namespace JobManagementApp.Services
                 if (!string.IsNullOrWhiteSpace(recv) && IsValidRecvSend(recv))
                 {
                     sql += " AND JOB_M.RECEIVE = :recv";
-                    parameters.Add(("recv", recv.Trim()));
+                    parameters.Add(new OracleParameter("recv", OracleDbType.Varchar2, recv.Trim(), ParameterDirection.Input));
                 }
 
                 // 条件　送信先
                 if (!string.IsNullOrWhiteSpace(send) && IsValidRecvSend(send))
                 {
                     sql += " AND JOB_M.SEND = :send";
-                    parameters.Add(("send", send.Trim()));
+                    parameters.Add(new OracleParameter("send", OracleDbType.Varchar2, send.Trim(), ParameterDirection.Input));
                 }
 
                 sql += " ORDER BY JOB_M.SCENARIO, JOB_M.EDA";
 
-                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                if (!DatabaseManager.Instance.ExecuteSelect(sql, parameters, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -795,126 +796,6 @@ namespace JobManagementApp.Services
             }
 
             return dt;
-        }
-
-        #endregion
-
-        #region 共通メソッド
-
-        /// <summary>
-        /// パラメータ化クエリを実行する共通メソッド
-        /// </summary>
-        private static bool ExecuteParameterizedQuery(string sql, List<(string name, object value)> parameters, ref DataTable dataTable)
-        {
-            try
-            {
-                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
-                
-                // パラメータ置換を安全に実行
-                var safeSql = BuildSafeSql(sql, parameters);
-                
-                // デバッグ用ログ
-                LogFile.WriteLog($"Execute SQL: {safeSql}");
-                
-                return pobjOraDb.pSelectOra(safeSql, ref dataTable);
-            }
-            catch (Exception e)
-            {
-                ErrLogFile.WriteLog($"ExecuteParameterizedQuery エラー: {e.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// パラメータ化コマンドを実行する共通メソッド
-        /// </summary>
-        private static bool ExecuteParameterizedCommand(string sql, List<(string name, object value)> parameters)
-        {
-            try
-            {
-                var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
-                
-                // パラメータ置換を安全に実行
-                var safeSql = BuildSafeSql(sql, parameters);
-                
-                // デバッグ用ログ
-                LogFile.WriteLog($"Execute Command: {safeSql}");
-                
-                return pobjOraDb.pExecOra(safeSql, DICSSLORA.ACmnOra.clsMngOracle.peTran.Yes);
-            }
-            catch (Exception e)
-            {
-                ErrLogFile.WriteLog($"ExecuteParameterizedCommand エラー: {e.Message}");
-                return false;
-                }
-        }
-
-        /// <summary>
-        /// 安全なSQL構築（パラメータ置換問題の根本解決）
-        /// </summary>
-        private static string BuildSafeSql(string sql, List<(string name, object value)> parameters)
-        {
-            var result = sql;
-            
-            // パラメータを長い順でソートして置換（部分一致問題を回避）
-            var sortedParams = parameters
-                .OrderByDescending(p => p.name.Length)
-                .ToList();
-            
-            foreach (var param in sortedParams)
-            {
-                var paramPlaceholder = $":{param.name}";
-                var safeValue = EscapeForSql(param.value?.ToString() ?? "");
-                
-                // パラメータが存在する場合のみ置換
-                if (result.Contains(paramPlaceholder))
-                {
-                    result = result.Replace(paramPlaceholder, $"'{safeValue}'");
-                    
-                    // デバッグ用ログ
-                    LogFile.WriteLog($"Parameter replaced: {paramPlaceholder} -> '{safeValue}'");
-                }
-                else
-                {
-                    ErrLogFile.WriteLog($"警告: パラメータ {paramPlaceholder} がSQLに見つかりません");
-                }
-            }
-            
-            // 置換されていないパラメータがないかチェック
-            if (result.Contains(":"))
-            {
-                ErrLogFile.WriteLog($"警告: 未置換のパラメータが残っています: {result}");
-            }
-            
-            return result;
-        }
-
-        /// <summary>
-        /// SQL文字列をエスケープする（暫定）
-        /// </summary>
-        private static string EscapeForSql(string input)
-        {
-            if (string.IsNullOrEmpty(input))
-                return "";
-
-            return input
-                .Replace("'", "''")           // シングルクォートをエスケープ
-                .Replace(";", "")             // セミコロンを除去
-                .Replace("--", "")            // SQLコメントを除去
-                .Replace("/*", "")            // ブロックコメント開始を除去
-                .Replace("*/", "")            // ブロックコメント終了を除去
-                .Replace("xp_", "")           // 危険なストアドプロシージャ呼び出しを除去
-                .Replace("sp_", "")           // 危険なストアドプロシージャ呼び出しを除去
-                .Replace("DROP", "")          // DROP文を除去
-                .Replace("DELETE", "")        // DELETE文を除去
-                .Replace("INSERT", "")        // INSERT文を除去
-                .Replace("UPDATE", "")        // UPDATE文を除去
-                .Replace("EXEC", "")          // EXEC文を除去
-                .Replace("EXECUTE", "")       // EXECUTE文を除去
-                .Replace("UNION", "")         // UNION文を除去
-                .Replace("SELECT", "")        // SELECT文を除去
-                .Replace("TRUNCATE", "")      // TRUNCATE文を除去
-                .Replace("ALTER", "");        // ALTER文を除去
         }
 
         #endregion

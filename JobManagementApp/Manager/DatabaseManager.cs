@@ -1,18 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using DICSSLORA.ACmnFunc;
 using DICSSLORA.ACmnIni;
 using DICSSLORA.ACmnLog;
-using DICSSLORA.ACmnOra;
 
 namespace JobManagementApp.Manager
 {
     /// <summary>
-    /// データベース管理クラス - 完全版リソース管理修正
+    /// データベース管理クラス - Oracle.ManagedDataAccess.Client対応版
     /// IDisposableを実装してリソースリークを防止
     /// </summary>
     public class DatabaseManager : IDisposable
@@ -22,7 +24,10 @@ namespace JobManagementApp.Manager
         public DICSSLORA.ACmnIni.clsMngIniFile pobjIniFile { get; private set; }
         public DICSSLORA.ACmnLog.clsMngLogFile pobjActLog { get; private set; }
         public DICSSLORA.ACmnLog.clsMngLogFile pobjErrLog { get; private set; }
-        public DICSSLORA.ACmnOra.clsMngOracle pobjOraDb { get; private set; }
+        
+        // Oracle.ManagedDataAccess.Client用
+        private OracleConnection _oracleConnection;
+        private string _connectionString;
 
         private static DatabaseManager _instance;
         private static readonly object _lock = new object();
@@ -34,6 +39,13 @@ namespace JobManagementApp.Manager
         private bool _isConnected = false;
         private DateTime _lastConnectionCheck = DateTime.MinValue;
         private readonly TimeSpan _connectionCheckInterval = TimeSpan.FromMinutes(5);
+
+        // 設定情報
+        private string _dataSource;
+        private string _userId;
+        private string _password;
+        private int _retrySleep;
+        private int _retryCount;
 
         #endregion
 
@@ -94,8 +106,8 @@ namespace JobManagementApp.Manager
                 // ログファイルの初期化
                 InitializeLogFiles();
 
-                // Oracleクライアントの初期化
-                InitializeOracleClient();
+                // Oracle接続の初期化
+                InitializeOracleConnection();
 
                 _isInitialized = true;
                 LogFile.WriteLog("DatabaseManager コンポーネントの初期化が完了しました");
@@ -160,41 +172,43 @@ namespace JobManagementApp.Manager
         }
 
         /// <summary>
-        /// Oracleクライアントの初期化
+        /// Oracle接続の初期化
         /// </summary>
-        private void InitializeOracleClient()
+        private void InitializeOracleConnection()
         {
             try
             {
-                var dataSource = pobjIniFile.pGetItemString("DB", "DATA_SOURCE");
-                var userId = pobjIniFile.pGetItemString("DB", "USER_ID");
-                var password = pobjIniFile.pGetItemString("DB", "PASSWORD");
-                var retrySleep = pobjIniFile.pGetItemInt("DB", "RTRY_SLEEP");
-                var retryCount = pobjIniFile.pGetItemInt("DB", "RTRY_CNT");
+                _dataSource = pobjIniFile.pGetItemString("DB", "DATA_SOURCE");
+                _userId = pobjIniFile.pGetItemString("DB", "USER_ID");
+                _password = pobjIniFile.pGetItemString("DB", "PASSWORD");
+                _retrySleep = pobjIniFile.pGetItemInt("DB", "RTRY_SLEEP");
+                _retryCount = pobjIniFile.pGetItemInt("DB", "RTRY_CNT");
 
                 // 接続情報の検証
-                if (string.IsNullOrWhiteSpace(dataSource) || 
-                    string.IsNullOrWhiteSpace(userId) || 
-                    string.IsNullOrWhiteSpace(password))
+                if (string.IsNullOrWhiteSpace(_dataSource) || 
+                    string.IsNullOrWhiteSpace(_userId) || 
+                    string.IsNullOrWhiteSpace(_password))
                 {
                     throw new InvalidOperationException("データベース接続情報が不完全です");
                 }
 
-                // ORACLEインスタンス生成 
-                pobjOraDb = new DICSSLORA.ACmnOra.clsMngOracle(
-                    dataSource, userId, password, retrySleep, retryCount,
-                    pobjActLog, pobjErrLog, clsMngOracle.peOraCom.ODP);
-
-                if (pobjOraDb == null)
+                // 接続文字列の構築
+                var builder = new OracleConnectionStringBuilder
                 {
-                    throw new InvalidOperationException("Oracleインスタンスの生成に失敗しました");
-                }
+                    DataSource = _dataSource,
+                    UserID = _userId,
+                    Password = _password,
+                    ConnectionTimeout = 30,
+                    CommandTimeout = 300
+                };
+                
+                _connectionString = builder.ConnectionString;
 
-                LogFile.WriteLog($"Oracleクライアントを正常に初期化しました (DataSource: {dataSource})");
+                LogFile.WriteLog($"Oracle接続を正常に初期化しました (DataSource: {_dataSource})");
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("Oracleクライアントの初期化に失敗しました", ex);
+                throw new InvalidOperationException("Oracle接続の初期化に失敗しました", ex);
             }
         }
 
@@ -250,22 +264,13 @@ namespace JobManagementApp.Manager
             {
                 LogFile.WriteLog("データベース接続を開始します");
 
-                // ORACLE初期化
-                if (!pobjOraDb.pInitOra())
-                {
-                    ErrLogFile.WriteLog("ORACLE 初期化に失敗しました");
-                    return false;
-                }
+                // 既存の接続をクローズ
+                CloseConnectionSafely();
 
-                // ORACLE接続
-                if (!pobjOraDb.pOpenOra())
-                {
-                    ErrLogFile.WriteLog("ORACLE 接続に失敗しました");
-                    return false;
-                }
+                // 新しい接続を作成
+                _oracleConnection = new OracleConnection(_connectionString);
+                _oracleConnection.Open();
 
-                // オープンクローズ制御を有効化
-                pobjOraDb.pOpenCloseCtrl = true;
                 _isConnected = true;
                 _lastConnectionCheck = DateTime.Now;
 
@@ -285,7 +290,7 @@ namespace JobManagementApp.Manager
         /// </summary>
         public bool IsConnectionHealthy()
         {
-            if (_disposed || !_isInitialized || pobjOraDb == null)
+            if (_disposed || !_isInitialized || _oracleConnection == null)
                 return false;
 
             try
@@ -293,24 +298,31 @@ namespace JobManagementApp.Manager
                 // 定期的な接続チェック（頻繁なチェックを避ける）
                 if (DateTime.Now - _lastConnectionCheck < _connectionCheckInterval)
                 {
-                    return _isConnected;
+                    return _isConnected && _oracleConnection.State == ConnectionState.Open;
                 }
 
                 lock (_connectionLock)
                 {
                     // 簡単な接続確認クエリを実行
-                    var testTable = new System.Data.DataTable();
-                    var testResult = pobjOraDb.pSelectOra("SELECT 1 FROM DUAL", ref testTable);
-                    
-                    _lastConnectionCheck = DateTime.Now;
-                    _isConnected = testResult && testTable.Rows.Count > 0;
-                    
-                    if (!_isConnected)
+                    if (_oracleConnection.State != ConnectionState.Open)
                     {
-                        ErrLogFile.WriteLog("データベース接続が無効になっています");
+                        _isConnected = false;
+                        return false;
                     }
-                    
-                    return _isConnected;
+
+                    using (var cmd = new OracleCommand("SELECT 1 FROM DUAL", _oracleConnection))
+                    {
+                        var result = cmd.ExecuteScalar();
+                        _lastConnectionCheck = DateTime.Now;
+                        _isConnected = result != null;
+                        
+                        if (!_isConnected)
+                        {
+                            ErrLogFile.WriteLog("データベース接続が無効になっています");
+                        }
+                        
+                        return _isConnected;
+                    }
                 }
             }
             catch (Exception ex)
@@ -370,10 +382,14 @@ namespace JobManagementApp.Manager
         {
             try
             {
-                if (pobjOraDb != null && _isConnected)
+                if (_oracleConnection != null && _isConnected)
                 {
-                    pobjOraDb.pOpenCloseCtrl = false;
-                    pobjOraDb.pCloseOra();
+                    if (_oracleConnection.State == ConnectionState.Open)
+                    {
+                        _oracleConnection.Close();
+                    }
+                    _oracleConnection.Dispose();
+                    _oracleConnection = null;
                     LogFile.WriteLog("データベース接続を安全にクローズしました");
                 }
             }
@@ -384,6 +400,151 @@ namespace JobManagementApp.Manager
             finally
             {
                 _isConnected = false;
+            }
+        }
+
+        #endregion
+
+        #region データアクセスメソッド
+
+        /// <summary>
+        /// SELECTクエリを実行してDataTableを返す
+        /// </summary>
+        public bool ExecuteSelect(string sql, List<OracleParameter> parameters, ref DataTable dataTable)
+        {
+            if (_disposed || !_isConnected || _oracleConnection == null)
+            {
+                ErrLogFile.WriteLog("データベース接続が無効です");
+                return false;
+            }
+
+            try
+            {
+                using (var cmd = new OracleCommand(sql, _oracleConnection))
+                {
+                    // パラメータを追加
+                    if (parameters != null)
+                    {
+                        cmd.Parameters.AddRange(parameters.ToArray());
+                    }
+
+                    using (var adapter = new OracleDataAdapter(cmd))
+                    {
+                        dataTable = new DataTable();
+                        adapter.Fill(dataTable);
+                    }
+                }
+
+                LogFile.WriteLog($"SELECT実行成功: {dataTable.Rows.Count}件取得");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ExecuteSelect エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"SQL: {sql}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// INSERT/UPDATE/DELETEクエリを実行
+        /// </summary>
+        public bool ExecuteNonQuery(string sql, List<OracleParameter> parameters, bool useTransaction = true)
+        {
+            if (_disposed || !_isConnected || _oracleConnection == null)
+            {
+                ErrLogFile.WriteLog("データベース接続が無効です");
+                return false;
+            }
+
+            OracleTransaction transaction = null;
+            try
+            {
+                if (useTransaction)
+                {
+                    transaction = _oracleConnection.BeginTransaction();
+                }
+
+                using (var cmd = new OracleCommand(sql, _oracleConnection))
+                {
+                    if (transaction != null)
+                    {
+                        cmd.Transaction = transaction;
+                    }
+
+                    // パラメータを追加
+                    if (parameters != null)
+                    {
+                        cmd.Parameters.AddRange(parameters.ToArray());
+                    }
+
+                    var rowsAffected = cmd.ExecuteNonQuery();
+                    
+                    if (transaction != null)
+                    {
+                        transaction.Commit();
+                    }
+
+                    LogFile.WriteLog($"NonQuery実行成功: {rowsAffected}行影響");
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (transaction != null)
+                {
+                    try
+                    {
+                        transaction.Rollback();
+                        LogFile.WriteLog("トランザクションをロールバックしました");
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        ErrLogFile.WriteLog($"ロールバックエラー: {rollbackEx.Message}");
+                    }
+                }
+
+                ErrLogFile.WriteLog($"ExecuteNonQuery エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"SQL: {sql}");
+                return false;
+            }
+            finally
+            {
+                transaction?.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// スカラー値を取得
+        /// </summary>
+        public object ExecuteScalar(string sql, List<OracleParameter> parameters)
+        {
+            if (_disposed || !_isConnected || _oracleConnection == null)
+            {
+                ErrLogFile.WriteLog("データベース接続が無効です");
+                return null;
+            }
+
+            try
+            {
+                using (var cmd = new OracleCommand(sql, _oracleConnection))
+                {
+                    // パラメータを追加
+                    if (parameters != null)
+                    {
+                        cmd.Parameters.AddRange(parameters.ToArray());
+                    }
+
+                    var result = cmd.ExecuteScalar();
+                    LogFile.WriteLog($"ExecuteScalar実行成功");
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ExecuteScalar エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"SQL: {sql}");
+                return null;
             }
         }
 
@@ -413,15 +574,12 @@ namespace JobManagementApp.Manager
         {
             try
             {
-                if (pobjIniFile == null)
-                    return null;
-
                 return new DatabaseConfiguration
                 {
-                    DataSource = pobjIniFile.pGetItemString("DB", "DATA_SOURCE"),
-                    UserId = pobjIniFile.pGetItemString("DB", "USER_ID"),
-                    RetrySleep = pobjIniFile.pGetItemInt("DB", "RTRY_SLEEP"),
-                    RetryCount = pobjIniFile.pGetItemInt("DB", "RTRY_CNT")
+                    DataSource = _dataSource,
+                    UserId = _userId,
+                    RetrySleep = _retrySleep,
+                    RetryCount = _retryCount
                     // パスワードは含めない
                 };
             }
@@ -461,12 +619,6 @@ namespace JobManagementApp.Manager
                         // データベース接続のクローズ
                         CloseConnectionSafely();
 
-                        // その他のリソース解放
-                        // 注意: ログファイルは他のクラスからも参照されている可能性があるため、
-                        // 実際のクローズは慎重に行う必要がある
-                        pobjOraDb = null;
-                        pobjIniFile = null;
-                        
                         _isInitialized = false;
                         _disposed = true;
 
