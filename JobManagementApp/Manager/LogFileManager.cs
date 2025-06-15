@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using DICSSLORA.ACmnFunc;
 using DICSSLORA.ACmnIni;
 using DICSSLORA.ACmnLog;
-using DICSSLORA.ACmnOra;
 
 namespace JobManagementApp.Manager
 {

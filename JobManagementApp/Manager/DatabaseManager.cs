@@ -198,9 +198,10 @@ namespace JobManagementApp.Manager
                     DataSource = _dataSource,
                     UserID = _userId,
                     Password = _password,
-                    ConnectionTimeout = 30,
-                    CommandTimeout = 300
+                    ConnectionTimeout = 30
                 };
+
+
                 
                 _connectionString = builder.ConnectionString;
 
