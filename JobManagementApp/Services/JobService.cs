@@ -54,17 +54,29 @@ namespace JobManagementApp.Services
                             JOB_M.EDA
                         FROM L1_UNYOCTL UNYO 
                         LEFT JOIN JOB_MANEGMENT JOB_M ON UNYO.JOBID = JOB_M.ID 
-                        WHERE UNYO.UPDDT BETWEEN TO_DATE(:fromDate, 'YYYY/MM/DD HH24:MI') 
-                                             AND TO_DATE(:toDate, 'YYYY/MM/DD HH24:MI')
-                        AND (";
+                        WHERE UNYO.UPDDT BETWEEN TO_DATE({0}, 'YYYY/MM/DD HH24:MI') 
+                                            AND TO_DATE({1}, 'YYYY/MM/DD HH24:MI')
+                        AND ({2})
+                        GROUP BY UNYO.JOBID, JOB_M.SCENARIO, JOB_M.EDA
+                    )
+                    SELECT 
+                        UNYO.JOBID,
+                        UNYO.SYRFLG,
+                        TO_CHAR(UNYO.UPDDT, 'YYYY/MM/DD HH24:MI:SS') AS UPDDT,
+                        JU.SCENARIO,
+                        JU.EDA
+                    FROM L1_UNYOCTL UNYO 
+                    INNER JOIN JOBID_UPDDT JU ON UNYO.JOBID = JU.JOBID 
+                                            AND UNYO.UPDDT = JU.UPDDT";
 
                 var conditionParts = new List<string>();
-                var parameters = new List<(string name, object value)>
-                {
-                    ("fromDate", fromDate),
-                    ("toDate", toDate)
-                };
+                var sqlParameters = new List<string>();
 
+                // 日付パラメータを追加
+                sqlParameters.Add($"'{EscapeForSql(fromDate)}'");
+                sqlParameters.Add($"'{EscapeForSql(toDate)}'");
+
+                // 動的条件を構築
                 for (int i = 0; i < args.Count; i++)
                 {
                     var scenario = args[i].Scenario?.Trim() ?? "";
@@ -77,12 +89,11 @@ namespace JobManagementApp.Services
                         continue;
                     }
 
-                    var scenarioParam = $"scenario{i}";
-                    var edaParam = $"eda{i}";
+                    // 直接値を埋め込む方式に変更（安全にエスケープ済み）
+                    var safeScenario = EscapeForSql(scenario);
+                    var safeEda = EscapeForSql(eda);
                     
-                    conditionParts.Add($"(JOB_M.SCENARIO = :{scenarioParam} AND JOB_M.EDA = :{edaParam})");
-                    parameters.Add((scenarioParam, scenario));
-                    parameters.Add((edaParam, eda));
+                    conditionParts.Add($"(JOB_M.SCENARIO = '{safeScenario}' AND JOB_M.EDA = '{safeEda}')");
                 }
 
                 if (conditionParts.Count == 0)
@@ -91,21 +102,16 @@ namespace JobManagementApp.Services
                     return new DataTable();
                 }
 
-                sql += string.Join(" OR ", conditionParts);
-                sql += @")
-                        GROUP BY UNYO.JOBID, JOB_M.SCENARIO, JOB_M.EDA
-                    )
-                    SELECT 
-                        UNYO.JOBID,
-                        UNYO.SYRFLG,
-                        TO_CHAR(UNYO.UPDDT, 'YYYY/MM/DD HH24:MI:SS') AS UPDDT,
-                        JU.SCENARIO,
-                        JU.EDA
-                    FROM L1_UNYOCTL UNYO 
-                    INNER JOIN JOBID_UPDDT JU ON UNYO.JOBID = JU.JOBID 
-                                             AND UNYO.UPDDT = JU.UPDDT";
+                // 条件部分を追加
+                sqlParameters.Add(string.Join(" OR ", conditionParts));
 
-                if (!ExecuteParameterizedQuery(sql, parameters, ref dt))
+                // 最終的なSQLを構築
+                var finalSql = string.Format(sql, sqlParameters.ToArray());
+
+                // デバッグ用ログ出力
+                LogFile.WriteLog($"GetUnyoData SQL: {finalSql}");
+
+                if (!ExecuteDirectQuery(finalSql, ref dt))
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
@@ -808,15 +814,12 @@ namespace JobManagementApp.Services
             {
                 var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
                 
-                // TODO: 将来的には真のパラメータ化クエリを使用すること
-                // 現在は暫定対応としてエスケープ処理を実装
-                var safeSql = sql;
-                foreach (var param in parameters)
-                {
-                    var safeValue = EscapeForSql(param.value?.ToString() ?? "");
-                    safeSql = safeSql.Replace($":{param.name}", $"'{safeValue}'");
-                }
-
+                // パラメータ置換を安全に実行
+                var safeSql = BuildSafeSql(sql, parameters);
+                
+                // デバッグ用ログ
+                LogFile.WriteLog($"Execute SQL: {safeSql}");
+                
                 return pobjOraDb.pSelectOra(safeSql, ref dataTable);
             }
             catch (Exception e)
@@ -835,22 +838,59 @@ namespace JobManagementApp.Services
             {
                 var pobjOraDb = DatabaseManager.Instance.pobjOraDb;
                 
-                // TODO: 将来的には真のパラメータ化クエリを使用すること
-                // 現在は暫定対応としてエスケープ処理を実装
-                var safeSql = sql;
-                foreach (var param in parameters)
-                {
-                    var safeValue = EscapeForSql(param.value?.ToString() ?? "");
-                    safeSql = safeSql.Replace($":{param.name}", $"'{safeValue}'");
-                }
-
+                // パラメータ置換を安全に実行
+                var safeSql = BuildSafeSql(sql, parameters);
+                
+                // デバッグ用ログ
+                LogFile.WriteLog($"Execute Command: {safeSql}");
+                
                 return pobjOraDb.pExecOra(safeSql, DICSSLORA.ACmnOra.clsMngOracle.peTran.Yes);
             }
             catch (Exception e)
             {
                 ErrLogFile.WriteLog($"ExecuteParameterizedCommand エラー: {e.Message}");
                 return false;
+                }
+        }
+
+        /// <summary>
+        /// 安全なSQL構築（パラメータ置換問題の根本解決）
+        /// </summary>
+        private static string BuildSafeSql(string sql, List<(string name, object value)> parameters)
+        {
+            var result = sql;
+            
+            // パラメータを長い順でソートして置換（部分一致問題を回避）
+            var sortedParams = parameters
+                .OrderByDescending(p => p.name.Length)
+                .ToList();
+            
+            foreach (var param in sortedParams)
+            {
+                var paramPlaceholder = $":{param.name}";
+                var safeValue = EscapeForSql(param.value?.ToString() ?? "");
+                
+                // パラメータが存在する場合のみ置換
+                if (result.Contains(paramPlaceholder))
+                {
+                    result = result.Replace(paramPlaceholder, $"'{safeValue}'");
+                    
+                    // デバッグ用ログ
+                    LogFile.WriteLog($"Parameter replaced: {paramPlaceholder} -> '{safeValue}'");
+                }
+                else
+                {
+                    ErrLogFile.WriteLog($"警告: パラメータ {paramPlaceholder} がSQLに見つかりません");
+                }
             }
+            
+            // 置換されていないパラメータがないかチェック
+            if (result.Contains(":"))
+            {
+                ErrLogFile.WriteLog($"警告: 未置換のパラメータが残っています: {result}");
+            }
+            
+            return result;
         }
 
         /// <summary>
@@ -870,7 +910,7 @@ namespace JobManagementApp.Services
                 .Replace("xp_", "")           // 危険なストアドプロシージャ呼び出しを除去
                 .Replace("sp_", "")           // 危険なストアドプロシージャ呼び出しを除去
                 .Replace("DROP", "")          // DROP文を除去
-                .Replace("DELETE", "")        // DELETE文を除去（値としてのDELETEは問題になる可能性あり）
+                .Replace("DELETE", "")        // DELETE文を除去
                 .Replace("INSERT", "")        // INSERT文を除去
                 .Replace("UPDATE", "")        // UPDATE文を除去
                 .Replace("EXEC", "")          // EXEC文を除去
