@@ -48,28 +48,37 @@ namespace JobManagementApp.Services
             try
             {
                 var sql = @"
-                    WITH JOBID_UPDDT AS (
+                    WITH RANKED_JOBS AS (
                         SELECT 
                             UNYO.JOBID,
-                            MAX(UNYO.UPDDT) AS UPDDT,
+                            UNYO.SYRFLG,
+                            UNYO.UPDDT,
                             JOB_M.SCENARIO,
-                            JOB_M.EDA
+                            JOB_M.EDA,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY UNYO.JOBID 
+                                ORDER BY UNYO.UPDDT DESC
+                            ) AS rn
                         FROM L1_UNYOCTL UNYO 
-                        LEFT JOIN JOB_MANEGMENT JOB_M ON UNYO.JOBID = JOB_M.ID 
-                        WHERE UNYO.UPDDT BETWEEN TO_DATE(:fromDate, 'YYYY/MM/DD HH24:MI') 
-                                            AND TO_DATE(:toDate, 'YYYY/MM/DD HH24:MI')
-                        AND ({0})
-                        GROUP BY UNYO.JOBID, JOB_M.SCENARIO, JOB_M.EDA
+                        INNER JOIN JOB_MANEGMENT JOB_M ON UNYO.JOBID = JOB_M.ID 
+                        WHERE JOB_M.RRSJFLG = 0
+                        AND ({0})  -- シナリオ・枝番条件
+                        AND (
+                            UNYO.UPDDT BETWEEN TO_DATE(:fromDate, 'YYYY/MM/DD HH24:MI') 
+                                        AND TO_DATE(:toDate, 'YYYY/MM/DD HH24:MI')
+                            OR 
+                            UNYO.UPDDT >= TO_DATE(:toDate, 'YYYY/MM/DD HH24:MI')  -- toDate以降の最新データも含める
+                        )
                     )
                     SELECT 
-                        UNYO.JOBID,
-                        UNYO.SYRFLG,
-                        TO_CHAR(UNYO.UPDDT, 'YYYY/MM/DD HH24:MI:SS') AS UPDDT,
-                        JU.SCENARIO,
-                        JU.EDA
-                    FROM L1_UNYOCTL UNYO 
-                    INNER JOIN JOBID_UPDDT JU ON UNYO.JOBID = JU.JOBID 
-                                            AND UNYO.UPDDT = JU.UPDDT";
+                        JOBID,
+                        SYRFLG,
+                        TO_CHAR(UPDDT, 'YYYY/MM/DD HH24:MI:SS') AS UPDDT,
+                        SCENARIO,
+                        EDA
+                    FROM RANKED_JOBS 
+                    WHERE rn = 1 -- 各ジョブの最新レコードのみ
+                    ORDER BY SCENARIO, EDA";
 
                 var parameters = new List<OracleParameter>
                 {
