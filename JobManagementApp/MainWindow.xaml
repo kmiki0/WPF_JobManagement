@@ -95,7 +95,8 @@
 
                     <!-- 検索範囲 To -->
                     <Label Grid.Column="5" VerticalAlignment="Center" Padding="0">~</Label>
-                    <TextBox Grid.Column="6" IsEnabled="False" Text="最新日付" Margin="0, 0, 10, 0" VerticalAlignment="Center" />
+                    <TextBox Grid.Column="6" Text="{Binding SearchToDate}" Margin="0, 0, 10, 0" VerticalAlignment="Center"
+                            ToolTip="検索終了日時 (デフォルト: 当日23:59)" />
                 </Grid> 
 
                 <!-- [検索項目] 2, 3行目 -->

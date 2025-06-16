@@ -145,6 +145,7 @@ namespace JobManagementApp.ViewModels
             {
                 _searchToDate = value;
                 OnPropertyChanged(nameof(SearchToDate));
+                _command?.CheckSearchDateTime(value, false);
             }
         }
 

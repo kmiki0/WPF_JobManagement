@@ -37,12 +37,14 @@ namespace JobManagementApp.Commands
         {
             // 画面更新日時
             _vm.DisplayUpdateDate = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+             
 
             // キャッシュ読み込み
             UserFileManager manager = new UserFileManager();
             _vm.UserId = manager.GetCache(manager.CacheKey_UserId);
             var getSearchTime = manager.GetCache(manager.CacheKey_SearchTime);
             _vm.SearchFromDate = getSearchTime == "" ? DateTime.Now.ToString("yyyy/MM/dd ") + "00:00" : DateTime.Now.ToString("yyyy/MM/dd ") + getSearchTime;
+            _vm.SearchToDate = DateTime.Now.ToString("yyyy/MM/dd") + " 23:59";
 
             // JOBリスト 作成
             CreateJobList();
@@ -74,7 +76,7 @@ namespace JobManagementApp.Commands
             {
                 var textName = isFrom ? "検索日付(開始)" : "検索日付(終了)";
                 MessageBox.Show($"[検索項目] {textName} ： 日付変換できない形式が入力されてます。",
-                    "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -97,6 +99,13 @@ namespace JobManagementApp.Commands
             // ボタン処理可能か
             if (!_vm.IsButtonEnabled) return;
             _vm.IsButtonEnabled = false;
+
+            // 日付範囲検証を追加
+            if (!ValidateDateRange(_vm.SearchFromDate, _vm.SearchToDate))
+            {
+                _vm.IsButtonEnabled = true; // ボタンを再有効化
+                return;
+            }
 
             // TreeView状態　初期化
             _vm.IsExpanded = false;
@@ -305,6 +314,9 @@ namespace JobManagementApp.Commands
 
         public void GetUnyoCtlData()
         {
+            // 日付範囲検証を追加
+            if (!ValidateDateRange(_vm.SearchFromDate, _vm.SearchToDate)) { return; }
+
             // 抽出する条件　待機中、実行中
             List<emStatus> whereStatus = new List<emStatus> { emStatus.WAIT, emStatus.RUN };
             var jobList = FindByStatus(_vm.Jobs, whereStatus);
@@ -400,6 +412,71 @@ namespace JobManagementApp.Commands
             return resultList;
         }
 
+
+        /// <summary>
+        /// 🆕 日付範囲の検証
+        /// </summary>
+        private bool ValidateDateRange(string fromDate, string toDate)
+        {
+            try
+            {
+                if (!DateTime.TryParse(fromDate, out DateTime from))
+                {
+                    MessageBox.Show("開始日時の形式が正しくありません。", "入力エラー", 
+                        MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    return false;
+                }
+
+                if (!DateTime.TryParse(toDate, out DateTime to))
+                {
+                    MessageBox.Show("終了日時の形式が正しくありません。", "入力エラー", 
+                        MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    return false;
+                }
+
+                // 開始日時が終了日時より後の場合
+                if (from >= to)
+                {
+                    MessageBox.Show("開始日時は終了日時より前に設定してください。", "入力エラー", 
+                        MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    return false;
+                }
+
+                // 検索範囲が長すぎる場合の警告（3日間）
+                if ((to - from).TotalDays > 3)
+                {
+                    var result = MessageBox.Show(
+                        $"検索範囲が{(to - from).TotalDays:F1}日間と長期間です。\n処理に時間がかかる可能性があります。続行しますか？", 
+                        "確認", 
+                        MessageBoxButton.YesNo, MessageBoxImage.Question, 
+                        MessageBoxResult.No, MessageBoxOptions.DefaultDesktopOnly);
+                    
+                    return result == MessageBoxResult.Yes;
+                }
+
+                // 未来の日付をチェック
+                if (to > DateTime.Now.AddMinutes(10))
+                {
+                    var result = MessageBox.Show(
+                        "終了日時が未来に設定されています。続行しますか？", 
+                        "確認", 
+                        MessageBoxButton.YesNo, MessageBoxImage.Question, 
+                        MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
+                    
+                    return result == MessageBoxResult.Yes;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ValidateDateRange エラー: {ex.Message}");
+                MessageBox.Show("日付検証中にエラーが発生しました。", "システムエラー", 
+                    MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                return false;
+            }
+        }
+
         /// <summary> 
         /// 検索日付の型チェックと回避処理
         /// </summary> 
@@ -408,9 +485,6 @@ namespace JobManagementApp.Commands
         {
             string result;
             DateTime dateValue;
-
-            // To は、空白の場合 現在時刻 +10 min
-            if (isFrom == false) return DateTime.Now.AddMinutes(10.0).ToString("yyyy/MM/dd HH:mm");
 
             // 文字列をDateTimeに変換できるか判断
             if (DateTime.TryParse(date, out dateValue))
@@ -428,10 +502,9 @@ namespace JobManagementApp.Commands
                 }
                 else
                 {
-                    // Toで変換できない場合、現在時刻 +10 min
-                    result = DateTime.Now.AddMinutes(10.0).ToString("yyyy/MM/dd HH:mm");
+                    // Toで変換できない場合、本日日付 + 23:59
+                    result = DateTime.Now.ToString("yyyy/MM/dd") + " 23:59";
                 }
-                
             }
 
             return result;
