@@ -22,7 +22,8 @@ namespace JobManagementApp.Manager
         private bool _isStopped = false;
         private string _copyBasePath; // コピー先 フォルダ
         private readonly List<JobLogItemViewModel> _logs;
-        private readonly DateTime _whereDateTime;
+        private readonly DateTime _fromDateTime;
+        private readonly DateTime _toDateTime;
 
         public event Action<string, string, int, int> ProgressChanged;
 
@@ -75,12 +76,14 @@ namespace JobManagementApp.Manager
             });
         }
 
-        public MultiFileWatcher(List<JobLogItemViewModel> logs, string copyPath, DateTime whereDateTime)
+
+        public MultiFileWatcher(List<JobLogItemViewModel> logs, string copyPath, DateTime fromDateTime, DateTime toDateTime)
         {
             // 初期値 セット
             _copyBasePath = copyPath;
             _logs = logs;
-            _whereDateTime = whereDateTime;
+            _fromDateTime = fromDateTime;
+            _toDateTime = toDateTime;
 
             // 返すイベント
             _fileCopyProgress.ProgressChanged += (fileName, destPath, totalSize, progress) =>
@@ -234,7 +237,8 @@ namespace JobManagementApp.Manager
         {
             var directory = new DirectoryInfo(Path.GetDirectoryName(fullPath));
             return directory.GetFiles()
-                .Where(t => t.LastWriteTime >= _whereDateTime)
+                .Where(t => t.LastWriteTime >= _fromDateTime && 
+                        t.LastWriteTime <= _toDateTime)  // 🆕 ToDateでも絞り込み
                 .Where(f => f.Name.Contains(Path.GetFileName(fullPath)))
                 .OrderByDescending(f => f.LastWriteTime)
                 .Take(fileCount)

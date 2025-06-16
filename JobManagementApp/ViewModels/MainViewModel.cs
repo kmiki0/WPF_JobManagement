@@ -134,6 +134,8 @@ namespace JobManagementApp.ViewModels
                 _searchFromDate = value;
                 OnPropertyChanged(nameof(SearchFromDate));
                 _command?.CheckSearchDateTime(value, true);
+                // LogWindowに変更を通知
+                NotifyLogWindowsOfDateChange();
             }
         }
 
@@ -146,6 +148,9 @@ namespace JobManagementApp.ViewModels
                 _searchToDate = value;
                 OnPropertyChanged(nameof(SearchToDate));
                 _command?.CheckSearchDateTime(value, false);
+
+                // LogWindowに変更を通知
+                NotifyLogWindowsOfDateChange();
             }
         }
 
@@ -229,6 +234,30 @@ namespace JobManagementApp.ViewModels
                 exisItem.Execution = updateModel.Execution;
                 exisItem.JobBoolean = updateModel.JobBoolean;
                 exisItem.Status = updateModel.Status;
+            }
+        }
+
+        /// <summary>
+        /// LogWindowに変更を通知
+        /// </summary>
+        private void NotifyLogWindowsOfDateChange()
+        {
+            try
+            {
+                // 開いているJobLogWindowを検索して更新
+                foreach (Window window in Application.Current.Windows)
+                {
+                    if (window is JobLogWindow logWindow && 
+                        logWindow.DataContext is JobLogViewModel logVM)
+                    {
+                        // 両方の日付を更新
+                        logVM.UpdateSearchDateDisplay();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"NotifyLogWindowsOfDateChange エラー: {ex.Message}");
             }
         }
 

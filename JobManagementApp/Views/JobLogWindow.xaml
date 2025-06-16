@@ -183,6 +183,20 @@
     </Window.Resources>
 
         <StackPanel Orientation="Vertical">
+            <!-- 日付範囲 -->
+            <Border Background="WhiteSmoke" BorderBrush="LightGray" BorderThickness="1" Margin="5" Padding="5">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="📅 検索範囲:" VerticalAlignment="Center" Margin="5" FontWeight="Bold" Foreground="DarkBlue"/>
+                    <TextBox Text="{Binding DisplaySearchFromDate}" Width="130" VerticalAlignment="Center" Margin="5"
+                            IsReadOnly="True" Background="WhiteSmoke" BorderThickness="0" Focusable="False"/>
+                    <TextBlock Text="～" VerticalAlignment="Center" Margin="2" FontWeight="Bold"/>
+                    <TextBox Text="{Binding DisplaySearchToDate}" Width="130" VerticalAlignment="Center" Margin="5"
+                            IsReadOnly="True" Background="WhiteSmoke" BorderThickness="0" Focusable="False"/>
+                    <TextBlock Text="(MainWindowで設定)" VerticalAlignment="Center" Margin="10" 
+                            FontStyle="Italic" Foreground="Gray" FontSize="11"/>
+                </StackPanel>
+            </Border>
+
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="一時保存先パス" Margin="5" VerticalAlignment="Center"></TextBlock>
                 <TextBox Text="{Binding TempSavePath}" Width="600" Margin="5" VerticalAlignment="Center"></TextBox>

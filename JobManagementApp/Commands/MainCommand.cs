@@ -454,18 +454,6 @@ namespace JobManagementApp.Commands
                     return result == MessageBoxResult.Yes;
                 }
 
-                // 未来の日付をチェック
-                if (to > DateTime.Now.AddMinutes(10))
-                {
-                    var result = MessageBox.Show(
-                        "終了日時が未来に設定されています。続行しますか？", 
-                        "確認", 
-                        MessageBoxButton.YesNo, MessageBoxImage.Question, 
-                        MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
-                    
-                    return result == MessageBoxResult.Yes;
-                }
-
                 return true;
             }
             catch (Exception ex)

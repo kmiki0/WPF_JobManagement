@@ -59,11 +59,14 @@ namespace JobManagementApp.Commands
             // ジョブID 読み込み
             LoadJobId();
 
+           // MainWindowから検索範囲を取得
+           _vm.UpdateSearchDateDisplay();
+
             // ログ一覧 読み込み
             LoadLogList();
         }
 
-        // ログ一覧 読み込み
+        // ログ一覧 読み込み - ToDate対応版
         public void LoadLogList()
         {
             var logList = new List<JobLogItemViewModel>();
@@ -216,7 +219,7 @@ namespace JobManagementApp.Commands
         }
 
         // ==================================
-        // 　ログ監視 - デバッグ強化版
+        // 　ログ監視 - ToDate対応版
         // ==================================
         public async Task StartMonitoring()
         {
@@ -224,7 +227,33 @@ namespace JobManagementApp.Commands
             {
                 LogFile.WriteLog("StartMonitoring: 監視を開始します");
                 
-                var _multiFileWatcher = new MultiFileWatcher(_vm.Logs.ToList(), _vm.TempSavePath, DateTime.Parse(MainViewModel.Instance.SearchFromDate));
+                // 🆕 MainWindowのFromDateとToDateを取得
+                DateTime fromDate;
+                DateTime toDate;
+                
+                try
+                {
+                    fromDate = DateTime.Parse(MainViewModel.Instance.SearchFromDate);
+                    toDate = DateTime.Parse(MainViewModel.Instance.SearchToDate);
+                    
+                    LogFile.WriteLog($"StartMonitoring: 検索範囲 - From: {fromDate:yyyy/MM/dd HH:mm}, To: {toDate:yyyy/MM/dd HH:mm}");
+                }
+                catch (Exception ex)
+                {
+                    // 日付解析に失敗した場合のフォールバック
+                    LogFile.WriteLog($"StartMonitoring: 日付解析エラー - {ex.Message}");
+                    fromDate = DateTime.Parse(MainViewModel.Instance.SearchFromDate);
+                    toDate = DateTime.Now.AddHours(1); // 1時間後をデフォルト
+                }
+                
+                // 🆕 MultiFileWatcherにToDateも渡す
+                // 注意: MultiFileWatcherのコンストラクタも修正が必要
+                var _multiFileWatcher = new MultiFileWatcher(
+                    _vm.Logs.ToList(), 
+                    _vm.TempSavePath, 
+                    fromDate,
+                    toDate  // 🆕 ToDateを追加
+                );
 
                 // イベント ファイルコピー時
                 _multiFileWatcher.ProgressChanged += OnFileProgressChanged;

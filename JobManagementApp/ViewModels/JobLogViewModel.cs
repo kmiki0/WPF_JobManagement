@@ -43,6 +43,27 @@ namespace JobManagementApp.ViewModels
                 OnPropertyChanged(nameof(TempSavePath));
             }
         }
+        // MainWindowから取得する検索範囲（表示用）
+        private string _displaySearchFromDate;
+        public string DisplaySearchFromDate 
+        {
+            get => _displaySearchFromDate;
+            set
+            {
+                _displaySearchFromDate = value;
+                OnPropertyChanged(nameof(DisplaySearchFromDate));
+            }
+        }
+        private string _displaySearchToDate;
+        public string DisplaySearchToDate 
+        {
+            get => _displaySearchToDate;
+            set
+            {
+                _displaySearchToDate = value;
+                OnPropertyChanged(nameof(DisplaySearchToDate));
+            }
+        }
         // ログ一覧
         private ObservableCollection<JobLogItemViewModel> _logs { get; set; }
         public ObservableCollection<JobLogItemViewModel> Logs {
@@ -70,6 +91,9 @@ namespace JobManagementApp.ViewModels
             // 初期値 セット
             this.Scenario = scenario;
             this.Eda = eda;
+
+            // MainWindowから値 セット
+            UpdateSearchDateDisplay();
 
             // コマンド 初期化
             _command = new JobLogCommand(this, IF);
@@ -101,6 +125,22 @@ namespace JobManagementApp.ViewModels
 
                 oldWindow?.Close();
             });
+        }
+
+        // MainWindowから検索範囲を取得して表示用プロパティに設定
+        public void UpdateSearchDateDisplay()
+        {
+            try
+            {
+                this.DisplaySearchFromDate = MainViewModel.Instance.SearchFromDate ?? "未設定";
+                this.DisplaySearchToDate = MainViewModel.Instance.SearchToDate ?? "未設定";
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"UpdateSearchDateDisplay エラー: {ex.Message}");
+                this.DisplaySearchFromDate = "取得エラー";
+                this.DisplaySearchToDate = "取得エラー";
+            }
         }
 
         // vm変更するとき
