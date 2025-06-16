@@ -5,11 +5,65 @@ using JobManagementApp.Models;
 using System.Windows;
 using System.ComponentModel;
 using System.Linq;
+using JobManagementApp.Manager;
 
 namespace JobManagementApp.ViewModels
 {
     public class JobLogDetailViewModel : INotifyPropertyChanged
     {
+        // イベント処理
+        private readonly JobLogDetailCommand _command;
+
+        public event EventHandler<JobParamModel> RequestClose;
+
+        public Window window;
+
+        // シナリオ
+        public string Scenario { get; set; }
+        // 枝番
+        public string Eda { get; set; }
+        // ジョブID
+        private string _jobId { get; set; }
+        public string JobId {
+            get => _jobId;
+            set
+            {
+                _jobId = value;
+                OnPropertyChanged(nameof(JobId));
+            }
+        }
+        // ファイル名
+        public string FileName { get; set; }
+        // ファイル名（以前）
+        public string OldFileName { get; set; }
+        // ファイルパス
+        public string FilePath { get; set; }
+        // ファイルパス（以前）
+        public string OldFilePath { get; set; }
+        // ファイルタイプ
+        public Array cmbFileType => Enum.GetValues(typeof(emFileType));
+        private emFileType _selectedFileType;
+        public emFileType SelectedFileType
+        {
+            get { return _selectedFileType; }
+            set
+            {
+                _selectedFileType = value;
+                OnPropertyChanged(nameof(SelectedFileType));
+            }
+        }
+        // 同名ファイル個数
+        public int[] cmbFileCount => Enumerable.Range(1, 20).ToArray(); // MAX20ファイルまでとする。
+        private int _selectedFileCount;
+        public int SelectedFileConut
+        {
+            get { return _selectedFileCount; }
+            set
+            {
+                _selectedFileCount = value;
+                OnPropertyChanged(nameof(SelectedFileConut));
+            }
+        }
         // 監視タイプ（自動(0)・手動(1)）- 検証機能付き
         private int _observerType = 0; // デフォルト値を明示的に設定
         public int ObserverType
@@ -55,6 +109,25 @@ namespace JobManagementApp.ViewModels
                 {
                     ObserverType = 1;
                 }
+            }
+        }
+
+        // 登録ボタン
+        public ICommand UpdateCommand { get; set; }
+        // 削除ボタン
+        public ICommand DeleteCommand { get; set; }
+        // 閉じるボタン
+        public ICommand CloseCommand { get; set; }
+
+        // ボタン処理可能
+        private bool _isButtonEnabled;
+        public bool IsButtonEnabled
+        {
+            get { return _isButtonEnabled; }
+            set
+            {
+                _isButtonEnabled = value;
+                OnPropertyChanged(nameof(IsButtonEnabled));
             }
         }
 
@@ -118,6 +191,26 @@ namespace JobManagementApp.ViewModels
                 ErrLogFile.WriteLog($"JobLogDetailViewModel編集初期化エラー: {ex.Message}");
                 throw;
             }
+        }
+
+        /// <summary>
+        /// 返却用 Closeイベント
+        /// </summary>
+        public void RequestClose_event()
+        {
+            // JobLogDetailの値をEventHandler<JobParamModel>型でセット
+            this.RequestClose.Invoke(this, new JobParamModel
+            {
+                Scenario = this.Scenario,
+                Eda = this.Eda,
+            });
+        }
+
+        // Vm変更するとき
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }
