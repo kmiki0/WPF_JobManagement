@@ -117,6 +117,7 @@
     <Compile Include="Helpers\TextBoxBehaviors.cs" />
     <Compile Include="Helpers\TupleConverter.cs" />
     <Compile Include="Helpers\WindowHelper.cs" />
+    <Compile Include="Manager\DatabaseConfigurationManager.cs" />
     <Compile Include="Manager\FileCopyProgress.cs" />
     <Compile Include="Manager\FileWatcherManager.cs" />
     <Compile Include="Manager\MultiFileWatcher.cs" />

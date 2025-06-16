@@ -135,8 +135,6 @@ namespace JobManagementApp.Manager
                 {
                     throw new InvalidOperationException("エラーログインスタンスの取得に失敗しました");
                 }
-
-                LogFile.WriteLog("ログファイルインスタンスを正常に初期化しました");
             }
             catch (Exception ex)
             {
@@ -166,15 +164,13 @@ namespace JobManagementApp.Manager
                     _connectionStates[dbSettings.Name] = false;
                     _lastConnectionChecks[dbSettings.Name] = DateTime.MinValue;
                     
-                    LogFile.WriteLog($"データベース設定を登録しました: {dbSettings.Name} -> {dbSettings.DataSource}");
+                    LogFile.WriteLog($"データベース設定を登録しました: {dbSettings.Name} -> {dbSettings.Address}:{dbSettings.Port}/{dbSettings.ServiceName}");
                 }
 
                 // デフォルトデータベースを設定
                 _currentDatabase = configManager.GetDefaultDatabase();
                 _currentDatabaseName = _currentDatabase.Name;
 
-                LogFile.WriteLog($"デフォルトデータベースを設定しました: {_currentDatabaseName}");
-                
                 // 設定情報をログに出力
                 configManager.LogConfigurationInfo();
             }
@@ -271,7 +267,8 @@ namespace JobManagementApp.Manager
                 _connectionStates[databaseName] = true;
                 _lastConnectionChecks[databaseName] = DateTime.Now;
 
-                LogFile.WriteLog($"データベース接続が正常に確立されました: {databaseName} -> {dbSettings.DataSource}");
+                LogFile.WriteLog($"データベース接続が正常に確立されました: {databaseName} -> {dbSettings.Address}:{dbSettings.Port}/{dbSettings.ServiceName}");
+                LogFile.WriteLog($"データベース接続が正常に確立されました: {databaseName} -> {dbSettings.Address}:{dbSettings.Port}/{dbSettings.ServiceName}");
                 return true;
             }
             catch (Exception ex)
@@ -290,7 +287,8 @@ namespace JobManagementApp.Manager
             try
             {
                 // Oracle接続文字列を手動で作成
-                var connectionString = $"Data Source={dbSettings.DataSource};" +
+
+                var connectionString = $"Data Source={dbSettings.Address}:{dbSettings.Port}/{dbSettings.ServiceName};" +
                                      $"User Id={dbSettings.UserId};" +
                                      $"Password={dbSettings.Password};" +
                                      $"Connection Timeout={dbSettings.ConnectionTimeout};" +
@@ -299,7 +297,7 @@ namespace JobManagementApp.Manager
                                      $"Min Pool Size=1;" +
                                      $"Max Pool Size=10;";
 
-                LogFile.WriteLog($"接続文字列を生成しました (パスワードは非表示): Data Source={dbSettings.DataSource};User Id={dbSettings.UserId};...");
+                LogFile.WriteLog($"接続文字列を生成しました : Data Source={dbSettings.Address}:{dbSettings.Port}/{dbSettings.ServiceName};User Id={dbSettings.UserId};...");
                 return connectionString;
             }
             catch (Exception ex)
@@ -739,7 +737,7 @@ namespace JobManagementApp.Manager
                 return new DatabaseConfiguration
                 {
                     Name = settings.Name,
-                    DataSource = settings.DataSource,
+                    DataSource = $"{settings.Address}:{settings.Port}/{settings.ServiceName}",
                     UserId = settings.UserId,
                     ConnectionTimeout = settings.ConnectionTimeout,
                     CommandTimeout = settings.CommandTimeout,

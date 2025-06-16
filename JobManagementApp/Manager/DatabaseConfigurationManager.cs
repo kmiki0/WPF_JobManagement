@@ -14,7 +14,9 @@ namespace JobManagementApp.Configuration
     {
         public string Name { get; set; }
         public bool IsDefault { get; set; }
-        public string DataSource { get; set; }
+        public string Address { get; set; }
+        public string Port { get; set; }
+        public string ServiceName { get; set; }
         public string UserId { get; set; }
         public string Password { get; set; }
         public int ConnectionTimeout { get; set; } = 30;
@@ -28,7 +30,7 @@ namespace JobManagementApp.Configuration
         /// </summary>
         public string GetConnectionString()
         {
-            return $"Data Source={DataSource};User Id={UserId};Password={Password};Connection Timeout={ConnectionTimeout};";
+            return $"Data Source={Address}:{Port}/{ServiceName};User Id={UserId};Password={Password};Connection Timeout={ConnectionTimeout};";
         }
         
         /// <summary>
@@ -36,7 +38,9 @@ namespace JobManagementApp.Configuration
         /// </summary>
         public bool IsValid()
         {
-            return !string.IsNullOrWhiteSpace(DataSource) &&
+            return !string.IsNullOrWhiteSpace(Address) &&
+                   !string.IsNullOrWhiteSpace(Port) &&
+                   !string.IsNullOrWhiteSpace(ServiceName) &&
                    !string.IsNullOrWhiteSpace(UserId) &&
                    !string.IsNullOrWhiteSpace(Password) &&
                    ConnectionTimeout > 0 &&
@@ -129,7 +133,7 @@ namespace JobManagementApp.Configuration
                             _defaultDatabase = settings;
                         }
                         
-                        LogFile.WriteLog($"データベース設定を読み込みました: {settings.Name} ({settings.DataSource})");
+                        LogFile.WriteLog($"データベース設定を読み込みました: {settings.Name} ({settings.Address}/{settings.ServiceName})");
                     }
                     else
                     {
@@ -162,7 +166,9 @@ namespace JobManagementApp.Configuration
                 {
                     Name = GetAttributeValue(dbElement, "name", ""),
                     IsDefault = GetAttributeValue(dbElement, "default", "false").Equals("true", StringComparison.OrdinalIgnoreCase),
-                    DataSource = GetElementValue(dbElement, "DataSource", ""),
+                    Address = GetElementValue(dbElement, "Address", ""),
+                    Port = GetElementValue(dbElement, "Port", ""),
+                    ServiceName = GetElementValue(dbElement, "ServiceName", ""),
                     UserId = GetElementValue(dbElement, "UserId", ""),
                     Password = GetElementValue(dbElement, "Password", ""),
                     ConnectionTimeout = GetElementValueAsInt(dbElement, "ConnectionTimeout", 30),
@@ -291,7 +297,7 @@ namespace JobManagementApp.Configuration
                 
                 foreach (var db in _databases.Values)
                 {
-                    LogFile.WriteLog($"  [{db.Name}] {db.DataSource} (ユーザー: {db.UserId})" + 
+                    LogFile.WriteLog($"  [{db.Name}] {db.Address}:{db.Port}/{db.ServiceName} (ユーザー: {db.UserId})" + 
                                    (db.IsDefault ? " [デフォルト]" : "") +
                                    (!string.IsNullOrEmpty(db.Description) ? $" - {db.Description}" : ""));
                 }
