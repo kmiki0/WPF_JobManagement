@@ -8,17 +8,16 @@ using JobManagementApp.Manager;
 namespace JobManagementApp.Configuration
 {
     /// <summary>
-    /// データベース設定情報クラス
+    /// データベース設定情報クラス - スキーマ指定対応版
     /// </summary>
     public class DatabaseSettings
     {
         public string Name { get; set; }
         public bool IsDefault { get; set; }
-        public string Address { get; set; }
-        public string Port { get; set; }
-        public string ServiceName { get; set; }
+        public string DataSource { get; set; }
         public string UserId { get; set; }
         public string Password { get; set; }
+        public string Schema { get; set; } 
         public int ConnectionTimeout { get; set; } = 30;
         public int CommandTimeout { get; set; } = 300;
         public int RetrySleep { get; set; } = 1000;
@@ -30,7 +29,7 @@ namespace JobManagementApp.Configuration
         /// </summary>
         public string GetConnectionString()
         {
-            return $"Data Source={Address}:{Port}/{ServiceName};User Id={UserId};Password={Password};Connection Timeout={ConnectionTimeout};";
+            return $"Data Source={DataSource};User Id={UserId};Password={Password};Connection Timeout={ConnectionTimeout};";
         }
         
         /// <summary>
@@ -38,9 +37,7 @@ namespace JobManagementApp.Configuration
         /// </summary>
         public bool IsValid()
         {
-            return !string.IsNullOrWhiteSpace(Address) &&
-                   !string.IsNullOrWhiteSpace(Port) &&
-                   !string.IsNullOrWhiteSpace(ServiceName) &&
+            return !string.IsNullOrWhiteSpace(DataSource) &&
                    !string.IsNullOrWhiteSpace(UserId) &&
                    !string.IsNullOrWhiteSpace(Password) &&
                    ConnectionTimeout > 0 &&
@@ -48,10 +45,29 @@ namespace JobManagementApp.Configuration
                    RetrySleep >= 0 &&
                    RetryCount >= 0;
         }
+
+        /// <summary>
+        /// スキーマが設定されているかチェック
+        /// </summary>
+        public bool HasSchema()
+        {
+            return !string.IsNullOrWhiteSpace(Schema);
+        }
+
+        /// <summary>
+        /// スキーマ変更用のSQL文を生成
+        /// </summary>
+        public string GetSchemaChangeSQL()
+        {
+            if (!HasSchema())
+                return null;
+            
+            return $"ALTER SESSION SET CURRENT_SCHEMA = {Schema}";
+        }
     }
 
     /// <summary>
-    /// データベース設定管理クラス - XML設定ファイル対応
+    /// データベース設定管理クラス - XML設定ファイル対応（スキーマ指定対応版）
     /// </summary>
     public class DatabaseConfigurationManager
     {
@@ -133,7 +149,8 @@ namespace JobManagementApp.Configuration
                             _defaultDatabase = settings;
                         }
                         
-                        LogFile.WriteLog($"データベース設定を読み込みました: {settings.Name} ({settings.Address}/{settings.ServiceName})");
+                        var schemaInfo = settings.HasSchema() ? $" (スキーマ: {settings.Schema})" : "";
+                        LogFile.WriteLog($"データベース設定を読み込みました: {settings.Name} ({settings.DataSource}){schemaInfo}");
                     }
                     else
                     {
@@ -156,7 +173,7 @@ namespace JobManagementApp.Configuration
         }
 
         /// <summary>
-        /// XML要素からデータベース設定を解析
+        /// XML要素からデータベース設定を解析 - スキーマ対応版
         /// </summary>
         private DatabaseSettings ParseDatabaseElement(XElement dbElement)
         {
@@ -166,11 +183,10 @@ namespace JobManagementApp.Configuration
                 {
                     Name = GetAttributeValue(dbElement, "name", ""),
                     IsDefault = GetAttributeValue(dbElement, "default", "false").Equals("true", StringComparison.OrdinalIgnoreCase),
-                    Address = GetElementValue(dbElement, "Address", ""),
-                    Port = GetElementValue(dbElement, "Port", ""),
-                    ServiceName = GetElementValue(dbElement, "ServiceName", ""),
+                    DataSource = GetElementValue(dbElement, "DataSource", ""),
                     UserId = GetElementValue(dbElement, "UserId", ""),
                     Password = GetElementValue(dbElement, "Password", ""),
+                    Schema = GetElementValue(dbElement, "Schema", ""),  // 🆕 スキーマ要素を追加
                     ConnectionTimeout = GetElementValueAsInt(dbElement, "ConnectionTimeout", 30),
                     CommandTimeout = GetElementValueAsInt(dbElement, "CommandTimeout", 300),
                     RetrySleep = GetElementValueAsInt(dbElement, "RetrySleep", 1000),
@@ -285,7 +301,7 @@ namespace JobManagementApp.Configuration
         }
 
         /// <summary>
-        /// 設定情報をログに出力（パスワードは除く）
+        /// 設定情報をログに出力（パスワードは除く）- スキーマ対応版
         /// </summary>
         public void LogConfigurationInfo()
         {
@@ -297,7 +313,8 @@ namespace JobManagementApp.Configuration
                 
                 foreach (var db in _databases.Values)
                 {
-                    LogFile.WriteLog($"  [{db.Name}] {db.Address}:{db.Port}/{db.ServiceName} (ユーザー: {db.UserId})" + 
+                    var schemaInfo = db.HasSchema() ? $" スキーマ: {db.Schema}" : " スキーマ: 未設定";
+                    LogFile.WriteLog($"  [{db.Name}] {db.DataSource} (ユーザー: {db.UserId}{schemaInfo})" + 
                                    (db.IsDefault ? " [デフォルト]" : "") +
                                    (!string.IsNullOrEmpty(db.Description) ? $" - {db.Description}" : ""));
                 }

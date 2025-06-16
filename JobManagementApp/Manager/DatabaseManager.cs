@@ -263,12 +263,17 @@ namespace JobManagementApp.Manager
                 var connection = new OracleConnection(connectionString);
                 connection.Open();
 
+                // 🆕 スキーマが設定されている場合、セッションスキーマを変更
+                if (dbSettings.HasSchema())
+                {
+                    SetSessionSchema(connection, dbSettings);
+                }
+
                 _connections[databaseName] = connection;
                 _connectionStates[databaseName] = true;
                 _lastConnectionChecks[databaseName] = DateTime.Now;
 
-                LogFile.WriteLog($"データベース接続が正常に確立されました: {databaseName} -> {dbSettings.Address}:{dbSettings.Port}/{dbSettings.ServiceName}");
-                LogFile.WriteLog($"データベース接続が正常に確立されました: {databaseName} -> {dbSettings.Address}:{dbSettings.Port}/{dbSettings.ServiceName}");
+                var schemaInfo = dbSettings.HasSchema() ? $" (スキーマ: {dbSettings.Schema})" : "";
                 return true;
             }
             catch (Exception ex)
@@ -306,6 +311,30 @@ namespace JobManagementApp.Manager
                 throw new InvalidOperationException("接続文字列の構築に失敗しました", ex);
             }
         }
+
+        /// <summary>
+        /// セッションスキーマを設定
+        /// </summary>
+        private void SetSessionSchema(OracleConnection connection, DatabaseSettings dbSettings)
+        {
+            try
+            {
+                var schemaSQL = dbSettings.GetSchemaChangeSQL();
+                if (!string.IsNullOrEmpty(schemaSQL))
+                {
+                    using (var cmd = new OracleCommand(schemaSQL, connection))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"セッションスキーマ設定エラー: {ex.Message}");
+                throw new InvalidOperationException($"スキーマ '{dbSettings.Schema}' の設定に失敗しました", ex);
+            }
+        }
+
 
         /// <summary>
         /// データベース接続の健全性をチェック
@@ -737,8 +766,9 @@ namespace JobManagementApp.Manager
                 return new DatabaseConfiguration
                 {
                     Name = settings.Name,
-                    DataSource = $"{settings.Address}:{settings.Port}/{settings.ServiceName}",
+                    DataSource = settings.DataSource,
                     UserId = settings.UserId,
+                    Schema = settings.Schema,  // 🆕 スキーマ情報を追加
                     ConnectionTimeout = settings.ConnectionTimeout,
                     CommandTimeout = settings.CommandTimeout,
                     RetrySleep = settings.RetrySleep,
@@ -847,6 +877,7 @@ namespace JobManagementApp.Manager
             public string Name { get; set; }
             public string DataSource { get; set; }
             public string UserId { get; set; }
+            public string Schema { get; set; }
             public int ConnectionTimeout { get; set; }
             public int CommandTimeout { get; set; }
             public int RetrySleep { get; set; }
