@@ -392,7 +392,6 @@ namespace JobManagementApp.Commands
                     LogFile.WriteLog($"HandleMultiFileProgress: ファイル名 - 実際: {actualFileName}, 基本: {baseFileName}, テンプレート: {templateLog.FileName}");
 
                     // このファイルが元のテンプレートファイル名と一致するかチェック
-                    // 重要：baseFileNameとtemplateLog.FileNameを比較
                     if (!baseFileName.Equals(templateLog.FileName, StringComparison.OrdinalIgnoreCase))
                     {
                         LogFile.WriteLog($"HandleMultiFileProgress: ファイル名が一致しません - 基本: {baseFileName}, テンプレート: {templateLog.FileName}");
@@ -432,7 +431,7 @@ namespace JobManagementApp.Commands
                         else
                         {
                             LogFile.WriteLog($"HandleMultiFileProgress: 新しいエントリを追加 - {actualFileName}");
-                            // 2回目以降：新しいエントリを追加
+                            // 2回目以降：新しいエントリを追加（昇順で挿入）
                             var newFileLog = CreateNewFileLogEntry(templateLog, filePath, destPath, totalSize, percent);
                             
                             if (newFileLog.ObserverStatus == emObserverStatus.SUCCESS)
@@ -440,17 +439,19 @@ namespace JobManagementApp.Commands
                                 newFileLog.LineCount = GetLineCount(destPath, newFileLog).ToString() + " 件";
                             }
 
-                            // ObservableCollectionに直接追加（より効率的）
-                            var templateIndex = _vm.Logs.IndexOf(templateLog);
-                            if (templateIndex >= 0 && templateIndex + 1 < _vm.Logs.Count)
+                            // 🆕 昇順になるよう挿入位置を計算
+                            var insertIndex = FindInsertPositionForAscendingOrder(templateLog, actualFileName);
+                            
+                            // 計算された位置に挿入
+                            if (insertIndex >= 0 && insertIndex <= _vm.Logs.Count)
                             {
-                                _vm.Logs.Insert(templateIndex + 1, newFileLog);
-                                LogFile.WriteLog($"HandleMultiFileProgress: テンプレートの次に挿入 (インデックス: {templateIndex + 1})");
+                                _vm.Logs.Insert(insertIndex, newFileLog);
+                                LogFile.WriteLog($"HandleMultiFileProgress: ファイル名昇順で挿入 (インデックス: {insertIndex}, ファイル名: {actualFileName})");
                             }
                             else
                             {
                                 _vm.Logs.Add(newFileLog);
-                                LogFile.WriteLog($"HandleMultiFileProgress: リストの最後に追加");
+                                LogFile.WriteLog($"HandleMultiFileProgress: リストの最後に追加 (ファイル名: {actualFileName})");
                             }
                             
                             LogFile.WriteLog($"HandleMultiFileProgress: ObservableCollection更新完了 (合計: {_vm.Logs.Count}件)");
@@ -465,6 +466,62 @@ namespace JobManagementApp.Commands
             {
                 ErrLogFile.WriteLog($"HandleMultiFileProgress エラー: {ex.Message}");
                 ErrLogFile.WriteLog($"スタックトレース: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// ファイル名昇順になるよう挿入位置を計算
+        /// </summary>
+        private int FindInsertPositionForAscendingOrder(JobLogItemViewModel templateLog, string newFileName)
+        {
+            try
+            {
+                LogFile.WriteLog($"FindInsertPositionForAscendingOrder: 挿入位置計算開始 - 新ファイル: {newFileName}");
+                
+                // 同じ基本ファイル名（テンプレート）に関連するエントリをすべて取得
+                var relatedEntries = _vm.Logs
+                    .Select((log, index) => new { Log = log, Index = index })
+                    .Where(x => x.Log.FileName == templateLog.FileName)
+                    .OrderBy(x => x.Index)
+                    .ToList();
+
+                LogFile.WriteLog($"FindInsertPositionForAscendingOrder: 関連エントリ数 - {relatedEntries.Count}件");
+
+                // 関連エントリがない場合（通常は起こらないはず）
+                if (!relatedEntries.Any())
+                {
+                    LogFile.WriteLog("FindInsertPositionForAscendingOrder: 関連エントリなし - 最後に挿入");
+                    return _vm.Logs.Count;
+                }
+
+                // 挿入位置を探す
+                for (int i = 0; i < relatedEntries.Count; i++)
+                {
+                    var currentEntry = relatedEntries[i];
+                    var currentDisplayFileName = currentEntry.Log.DisplayFileName;
+                    
+                    LogFile.WriteLog($"FindInsertPositionForAscendingOrder: 比較中 - [{i}] {currentDisplayFileName} vs {newFileName}");
+                    
+                    // 文字列比較で新しいファイル名が現在のエントリより小さい場合
+                    if (string.Compare(newFileName, currentDisplayFileName, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        LogFile.WriteLog($"FindInsertPositionForAscendingOrder: 挿入位置決定 - インデックス: {currentEntry.Index}");
+                        return currentEntry.Index;
+                    }
+                }
+
+                // すべてのエントリより大きい場合は、最後の関連エントリの次に挿入
+                var lastRelatedEntry = relatedEntries.Last();
+                var insertIndex = lastRelatedEntry.Index + 1;
+                
+                LogFile.WriteLog($"FindInsertPositionForAscendingOrder: 最後の関連エントリの次に挿入 - インデックス: {insertIndex}");
+                return insertIndex;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"FindInsertPositionForAscendingOrder エラー: {ex.Message}");
+                // エラー時は安全に最後に追加
+                return _vm.Logs.Count;
             }
         }
 
