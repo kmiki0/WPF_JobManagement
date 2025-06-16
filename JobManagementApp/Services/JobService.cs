@@ -669,11 +669,11 @@ namespace JobManagementApp.Services
                 var parameters = new List<OracleParameter>();
 
                 // ユーザーが設定されている場合、条件追加
-                if (!string.IsNullOrWhiteSpace(userId) && IsValidUserId(userId))
-                {
-                    sql += " AND JOB_O.USERID = :userid";
-                    parameters.Add(new OracleParameter("userid", OracleDbType.Varchar2, userId.Trim(), ParameterDirection.Input));
-                }
+                //if (!string.IsNullOrWhiteSpace(userId) && IsValidUserId(userId))
+                //{
+                //    sql += " AND JOB_O.USERID = :userid";
+                //    parameters.Add(new OracleParameter("userid", OracleDbType.Varchar2, userId.Trim(), ParameterDirection.Input));
+                //}
 
                 sql += @"
                     ORDER BY JOB_M.SCENARIO, JOB_M.EDA";

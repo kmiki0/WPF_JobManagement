@@ -10,6 +10,9 @@ using System.Windows.Media.Animation;
 using System.Threading.Tasks;
 using System;
 using System.Windows.Media;
+using JobManagementApp.Manager;
+using System.Windows;
+using JobManagementApp.Views;
 
 namespace JobManagementApp.ViewModels
 {

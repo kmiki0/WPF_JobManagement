@@ -766,9 +766,9 @@ namespace JobManagementApp.Manager
                 return new DatabaseConfiguration
                 {
                     Name = settings.Name,
-                    DataSource = settings.DataSource,
+                    DataSource = $"{settings.Address}:{settings.Port}/{settings.ServiceName}",
                     UserId = settings.UserId,
-                    Schema = settings.Schema,  // 🆕 スキーマ情報を追加
+                    Schema = settings.Schema,
                     ConnectionTimeout = settings.ConnectionTimeout,
                     CommandTimeout = settings.CommandTimeout,
                     RetrySleep = settings.RetrySleep,
