@@ -824,14 +824,13 @@ namespace JobManagementApp.Services
                     {
                         Name = db.Name,
                         Address = db.Address,
-                        Schema = db.Schema ?? "未設定",
-                        DisplayText = $"IP : {db.Address},  Table : {(string.IsNullOrEmpty(db.Schema) ? "未設定" : db.Schema)}"
+                        ServiceName = db.ServiceName,
+                        Schema = db.Schema ?? ""
                     };
                     
                     displayInfos.Add(displayInfo);
                 }
                 
-                LogFile.WriteLog($"GetAvailableDatabaseDisplayInfos: {displayInfos.Count}件のデータベース表示情報を取得しました");
                 return displayInfos.ToArray();
             }
             catch (Exception e)

@@ -65,12 +65,19 @@ namespace JobManagementApp.Commands
                         _vm.Send = result.SEND ?? "";
                         _vm.Memo = (result.MEMO ?? "").Replace("\\n", Environment.NewLine);
 
-                        //  FROMSERVERの設定（DatabaseDisplayInfoから該当するものを検索）
+                        // FROMSERVERの設定（DatabaseValueから該当するものを検索）
                         var savedFromServer = result.FROMSERVER ?? "";
                         if (!string.IsNullOrEmpty(savedFromServer) && _vm.cmbFromServer != null)
                         {
-                            var matchingDb = _vm.cmbFromServer.FirstOrDefault(db => db.Name == savedFromServer);
+                            // 保存されている値（Address|ServiceName|Schema）と一致するDatabaseDisplayInfoを検索
+                            var matchingDb = _vm.cmbFromServer.FirstOrDefault(db => db.DatabaseValue == savedFromServer);
                             _vm.SelectedFromServer = matchingDb;
+                            
+                            // 見つからない場合は、デバッグログ出力
+                            if (matchingDb == null)
+                            {
+                                LogFile.WriteLog($"LoadViewModel: 保存されたFROMSERVER値に一致するデータベース設定が見つかりません: {savedFromServer}");
+                            }
                         }
                     });
                 }
@@ -367,7 +374,7 @@ namespace JobManagementApp.Commands
                 RECEIVE = _vm.Receive?.Trim() ?? "",
                 SEND = _vm.Send?.Trim() ?? "",
                 MEMO = (_vm.Memo?.Replace(Environment.NewLine, "\\n"))?.Trim() ?? "",
-                FROMSERVER = _vm.SelectedFromServer?.Name?.Trim() ?? ""
+                FROMSERVER = _vm.SelectedFromServer?.DatabaseValue?.Trim() ?? ""
             };
         }
 

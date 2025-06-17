@@ -154,16 +154,26 @@ namespace JobManagementApp.Models
     {
         // データベース名
         public string Name { get; set; }
-        // 表示用文字列
-        public string DisplayText { get; set; }
         // IPアドレス
         public string Address { get; set; }
+        // サービス名
+        public string ServiceName { get; set; }
         // スキーマ名
         public string Schema { get; set; }
+        
+        // DB保存用の文字列（Address|ServiceName|Schema）
+        public string DatabaseValue 
+        { 
+            get 
+            { 
+                return $"{Address}|{ServiceName}|{Schema ?? ""}"; 
+            } 
+        }
 
+        // コンボボックスにはName（データベース名）を表示
         public override string ToString()
         {
-            return DisplayText;
+            return Name;
         }
     }
 
