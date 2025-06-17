@@ -50,16 +50,82 @@ namespace JobManagementApp.Commands
         /// </summary> 
         public void DetailButton_Click(object parameter)
         {
-            var arg = ConvertParameter(parameter);
-            JobDetailViewModel vm = new JobDetailViewModel(new JobDetailModel(), arg.scenario, arg.eda);
-            vm.RequestClose += DetailWindow_RequestClose;
-            JobDetailWindow detailWindow = new JobDetailWindow(vm);
-            var window = detailWindow as System.Windows.Window;
-            // ウィンドウの表示位置　調整
-            WindowHelper.SetWindowLocation(ref window);
-            vm.window = detailWindow;
-            detailWindow.DataContext = vm;
-            detailWindow.Show();
+            try
+            {
+                var arg = ConvertParameter(parameter);
+                
+                // 既存の詳細ウィンドウが開いていないかチェック
+                if (IsDetailWindowAlreadyOpen(arg.scenario, arg.eda))
+                {
+                    return;
+                }
+
+                JobDetailViewModel vm = new JobDetailViewModel(new JobDetailModel(), arg.scenario, arg.eda);
+                vm.RequestClose += DetailWindow_RequestClose;
+                
+                JobDetailWindow detailWindow = new JobDetailWindow(vm);
+                var window = detailWindow as System.Windows.Window;
+                
+                // ウィンドウの表示位置　調整
+                WindowHelper.SetWindowLocation(ref window);
+                vm.window = detailWindow;
+                detailWindow.DataContext = vm;
+                
+                // ウィンドウクローズイベントの処理
+                detailWindow.Closed += (sender, e) => HandleWindowClosed(vm);
+                detailWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"DetailButton_Click エラー: {ex.Message}");
+                MessageBox.Show("詳細画面の表示中にエラーが発生しました。", "エラー", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 指定されたジョブの詳細ウィンドウが既に開いているかチェック
+        /// </summary>
+        private bool IsDetailWindowAlreadyOpen(string scenario, string eda)
+        {
+            try
+            {
+                foreach (Window window in Application.Current.Windows)
+                {
+                    if (window is JobDetailWindow detailWindow && 
+                        detailWindow.DataContext is JobDetailViewModel vm)
+                    {
+                        if (vm.Scenario == scenario && vm.Eda == eda)
+                        {
+                            // 既に開いている場合はアクティブにする
+                            window.Activate();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"IsDetailWindowAlreadyOpen エラー: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// ウィンドウクローズ時の処理
+        /// </summary>
+        private void HandleWindowClosed(JobDetailViewModel vm)
+        {
+            try
+            {
+                // ViewModelのクリーンアップ
+                vm?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"HandleWindowClosed エラー: {ex.Message}");
+            }
         }
 
         /// <summary> 

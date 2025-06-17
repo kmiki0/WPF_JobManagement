@@ -21,8 +21,8 @@ namespace JobManagementApp.Views
         public JobDetailWindow(JobDetailViewModel vm)
         {
             InitializeComponent();
-            // WindowのCloseイベントに追加
-            vm.RequestClose += (s, e) => this?.Dispatcher.Invoke(() => this.Close());
+            // ViewModelのRequestCloseイベントでウィンドウを閉じる
+            vm.RequestClose += (s, e) => this?.Close();
         }
     }
 }

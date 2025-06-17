@@ -22,6 +22,8 @@ namespace JobManagementApp.ViewModels
         // JobDetailWindow
         public Window window;
 
+        private bool _isDisposed = false;
+
         // Closeイベント 上書き
         public event EventHandler<JobListItemViewModel> RequestClose;
 
@@ -246,24 +248,62 @@ namespace JobManagementApp.ViewModels
         /// </summary>
         public void RequestClose_event()
         {
-            // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
-            this.RequestClose.Invoke(this, new JobListItemViewModel
+            try
             {
-                Scenario = this.Scenario,
-                Eda = this.Eda,
-                Id = this.Id,
-                Name = this.Name,
-                Execution = this.SelectedExecution,
-                JobBoolean = this.JobBoolean,
-                Status = this.SelectedStatus,
-            });
+                if (_isDisposed) return;
+
+                // DetailViewModelの値をEventHandler<JobListItemViewModel>型でセット
+                this.RequestClose?.Invoke(this, new JobListItemViewModel
+                {
+                    Scenario = this.Scenario,
+                    Eda = this.Eda,
+                    Id = this.Id,
+                    Name = this.Name,
+                    Execution = this.SelectedExecution,
+                    JobBoolean = this.JobBoolean,
+                    Status = this.SelectedStatus,
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"RequestClose_event エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// リソースのクリーンアップ
+        /// </summary>
+        public void Dispose()
+        {
+            try
+            {
+                if (_isDisposed) return;
+
+                LogFile.WriteLog($"JobDetailViewModel破棄開始: {Scenario}/{Eda}");
+
+                // イベントハンドラーをクリア
+                RequestClose = null;
+
+                // ウィンドウ参照をクリア
+                window = null;
+
+                _isDisposed = true;
+                LogFile.WriteLog($"JobDetailViewModel破棄完了: {Scenario}/{Eda}");
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"JobDetailViewModel.Dispose エラー: {ex.Message}");
+            }
         }
 
         // VM変更検知
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string propertyName)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            if (!_isDisposed)
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            }
         }
     }
 }
