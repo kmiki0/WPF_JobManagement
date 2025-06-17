@@ -4,6 +4,7 @@ using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using JobManagementApp.Configuration;
 using JobManagementApp.Manager;
 using JobManagementApp.Models;
 using Oracle.ManagedDataAccess.Client;
@@ -325,7 +326,7 @@ namespace JobManagementApp.Services
                     new OracleParameter("jobboolean", OracleDbType.Int32, job.JOBBOOLEAN, ParameterDirection.Input),
                     new OracleParameter("receive", OracleDbType.Varchar2, job.RECEIVE?.Trim() ?? "", ParameterDirection.Input),
                     new OracleParameter("send", OracleDbType.Varchar2, job.SEND?.Trim() ?? "", ParameterDirection.Input),
-                    new OracleParameter("memo", OracleDbType.Varchar2, job.MEMO?.Trim() ?? "", ParameterDirection.Input)
+                    new OracleParameter("memo", OracleDbType.Varchar2, job.MEMO?.Trim() ?? "", ParameterDirection.Input),
                     new OracleParameter("fromserver", OracleDbType.Varchar2, job.FROMSERVER?.Trim() ?? "", ParameterDirection.Input)
                 };
 
