@@ -69,6 +69,8 @@ namespace JobManagementApp.Models
         public string SEND { get; set; }
         // メモ
         public string MEMO { get; set; }
+        // 運用処理管理R検索用データベース名
+        public string FROMSERVER { get; set; }
     }
 
     public class JobLinkFile
@@ -146,5 +148,23 @@ namespace JobManagementApp.Models
         public int FileSize { get; set; }
         public bool IsMultiFile{ get; set; }
     } 
+
+    // データベース表示情報クラス
+    public class DatabaseDisplayInfo
+    {
+        // データベース名
+        public string Name { get; set; }
+        // 表示用文字列
+        public string DisplayText { get; set; }
+        // IPアドレス
+        public string Address { get; set; }
+        // スキーマ名
+        public string Schema { get; set; }
+
+        public override string ToString()
+        {
+            return DisplayText;
+        }
+    }
 
 }

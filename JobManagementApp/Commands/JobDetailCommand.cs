@@ -14,7 +14,7 @@ using System.Windows;
 namespace JobManagementApp.Commands
 {
     /// <summary>
-    /// 緊急修正: 適切なエラーハンドリングと入力検証を追加
+    /// ジョブ管理の詳細画面　コマンド
     /// </summary>
     class JobDetailCommand : JobCommandArgument
     {
@@ -27,9 +27,9 @@ namespace JobManagementApp.Commands
             _if = IF ?? throw new ArgumentNullException(nameof(IF));
         }
 
+
         /// <summary> 
         /// 画面項目 読み込み処理
-        /// 緊急修正: エラーハンドリングと入力検証を追加
         /// </summary> 
         public async void LoadViewModel()
         {
@@ -64,9 +64,15 @@ namespace JobManagementApp.Commands
                         _vm.Receive = result.RECEIVE ?? "";
                         _vm.Send = result.SEND ?? "";
                         _vm.Memo = (result.MEMO ?? "").Replace("\\n", Environment.NewLine);
-                    });
 
-                    LogFile.WriteLog($"ジョブデータを正常に読み込みました: {_vm.Scenario}-{_vm.Eda}");
+                        //  FROMSERVERの設定（DatabaseDisplayInfoから該当するものを検索）
+                        var savedFromServer = result.FROMSERVER ?? "";
+                        if (!string.IsNullOrEmpty(savedFromServer) && _vm.cmbFromServer != null)
+                        {
+                            var matchingDb = _vm.cmbFromServer.FirstOrDefault(db => db.Name == savedFromServer);
+                            _vm.SelectedFromServer = matchingDb;
+                        }
+                    });
                 }
                 else
                 {
@@ -86,7 +92,6 @@ namespace JobManagementApp.Commands
 
         /// <summary> 
         /// 登録ボタン クリック処理
-        /// 緊急修正: エラーハンドリングと入力検証を追加
         /// </summary> 
         public async void UpdateButton_Click(object _)
         {
@@ -144,7 +149,6 @@ namespace JobManagementApp.Commands
 
         /// <summary> 
         /// 閉じるボタン クリック処理
-        /// 緊急修正: エラーハンドリングを追加
         /// </summary> 
         public void CloseButton_Click(object _)
         {
@@ -164,7 +168,6 @@ namespace JobManagementApp.Commands
 
         /// <summary> 
         /// 削除ボタン クリック処理
-        /// 緊急修正: エラーハンドリングと確認ダイアログを追加
         /// </summary> 
         public async void DeleteButton_Click(object _)
         {
@@ -229,7 +232,6 @@ namespace JobManagementApp.Commands
 
         /// <summary> 
         /// シナリオ　フォーカスアウト処理
-        /// 緊急修正: エラーハンドリングと入力検証を追加
         /// </summary> 
         public async void ScenarioTextBox_LostFocus(object _)
         {
@@ -257,7 +259,36 @@ namespace JobManagementApp.Commands
             }
         }
 
-        #region 緊急追加: ヘルパーメソッド
+        /// <summary>
+        /// データベース名一覧を読み込み
+        /// </summary>
+        public async void LoadDatabaseNames()
+        {
+            try
+            {
+                var databaseInfos = await _if.GetAvailableDatabaseDisplayInfos();
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _vm.cmbFromServer = databaseInfos;
+                    
+                    // デフォルト値を設定
+                    if (databaseInfos.Length > 0 && _vm.SelectedFromServer == null)
+                    {
+                        _vm.SelectedFromServer = databaseInfos[0];
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"LoadDatabaseNames エラー: {ex.Message}");
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _vm.cmbFromServer = new DatabaseDisplayInfo[0];
+                });
+            }
+        }
+
+        #region ヘルパーメソッド
 
         /// <summary>
         /// 入力検証を実行
@@ -289,6 +320,10 @@ namespace JobManagementApp.Commands
             // 枝番の数値チェック
             if (!int.TryParse(_vm.Eda, out int edaValue) || edaValue < 1)
                 errors.Add("枝番は1以上の数値で入力してください。");
+
+            // FROMSERVER検証
+            if (_vm.SelectedFromServer == null)
+                errors.Add("運用処理管理検索先を選択してください。");
 
             // 特殊文字チェック（SQLインジェクション対策）
             if (ContainsDangerousCharacters(_vm.Scenario) || 
@@ -331,7 +366,8 @@ namespace JobManagementApp.Commands
                 JOBBOOLEAN = _vm.JobBoolean ? 1 : 0,
                 RECEIVE = _vm.Receive?.Trim() ?? "",
                 SEND = _vm.Send?.Trim() ?? "",
-                MEMO = (_vm.Memo?.Replace(Environment.NewLine, "\\n"))?.Trim() ?? ""
+                MEMO = (_vm.Memo?.Replace(Environment.NewLine, "\\n"))?.Trim() ?? "",
+                FROMSERVER = _vm.SelectedFromServer?.Name?.Trim() ?? ""
             };
         }
 

@@ -250,7 +250,7 @@ namespace JobManagementApp.Services
                 var sql = @"
                     SELECT 
                         SCENARIO, EDA, ID, NAME, EXECUTION, EXECCOMMNAD, 
-                        STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO
+                        STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO, FROMSERVER
                     FROM JOB_MANEGMENT 
                     WHERE RRSJFLG = 0 
                     AND SCENARIO = :scenario 
@@ -306,10 +306,11 @@ namespace JobManagementApp.Services
                             JM.JOBBOOLEAN = :jobboolean,
                             JM.RECEIVE = :receive,
                             JM.SEND = :send,
-                            JM.MEMO = :memo
+                            JM.MEMO = :memo,
+                            JM.FROMSERVER = :fromserver
                     WHEN NOT MATCHED THEN
-                        INSERT (SCENARIO, EDA, ID, NAME, EXECUTION, EXECCOMMNAD, STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO, RRSJFLG)
-                        VALUES (:scenario, :eda, :id, :name, :execution, :execcommnad, :status, :beforejob, :jobboolean, :receive, :send, :memo, 0)";
+                        INSERT (SCENARIO, EDA, ID, NAME, EXECUTION, EXECCOMMNAD, STATUS, BEFOREJOB, JOBBOOLEAN, RECEIVE, SEND, MEMO, FROMSERVER, RRSJFLG)
+                        VALUES (:scenario, :eda, :id, :name, :execution, :execcommnad, :status, :beforejob, :jobboolean, :receive, :send, :memo, :fromserver, 0)";
 
                 var parameters = new List<OracleParameter>
                 {
@@ -325,6 +326,7 @@ namespace JobManagementApp.Services
                     new OracleParameter("receive", OracleDbType.Varchar2, job.RECEIVE?.Trim() ?? "", ParameterDirection.Input),
                     new OracleParameter("send", OracleDbType.Varchar2, job.SEND?.Trim() ?? "", ParameterDirection.Input),
                     new OracleParameter("memo", OracleDbType.Varchar2, job.MEMO?.Trim() ?? "", ParameterDirection.Input)
+                    new OracleParameter("fromserver", OracleDbType.Varchar2, job.FROMSERVER?.Trim() ?? "", ParameterDirection.Input)
                 };
 
                 if (!DatabaseManager.Instance.ExecuteNonQuery(sql, parameters))
@@ -803,6 +805,41 @@ namespace JobManagementApp.Services
             return dt;
         }
 
+        /// <summary>
+        /// 利用可能なデータベース表示情報一覧を取得
+        /// </summary>
+        public static DatabaseDisplayInfo[] GetAvailableDatabaseDisplayInfos()
+        {
+            try
+            {
+                var configManager = DatabaseConfigurationManager.Instance;
+                var allDatabases = configManager.GetAllDatabases();
+                
+                var displayInfos = new List<DatabaseDisplayInfo>();
+                
+                foreach (var db in allDatabases)
+                {
+                    var displayInfo = new DatabaseDisplayInfo
+                    {
+                        Name = db.Name,
+                        Address = db.Address,
+                        Schema = db.Schema ?? "未設定",
+                        DisplayText = $"IP : {db.Address},  Table : {(string.IsNullOrEmpty(db.Schema) ? "未設定" : db.Schema)}"
+                    };
+                    
+                    displayInfos.Add(displayInfo);
+                }
+                
+                LogFile.WriteLog($"GetAvailableDatabaseDisplayInfos: {displayInfos.Count}件のデータベース表示情報を取得しました");
+                return displayInfos.ToArray();
+            }
+            catch (Exception e)
+            {
+                ErrLogFile.WriteLog($"GetAvailableDatabaseDisplayInfos エラー: {e.Message}");
+                return new DatabaseDisplayInfo[0];
+            }
+        }
+
         #endregion
 
         #region 入力検証メソッド
@@ -957,6 +994,9 @@ namespace JobManagementApp.Services
 
             if (job.JOBBOOLEAN < 0 || job.JOBBOOLEAN > 1)
                 errors.Add("ジョブ実行可否が無効です");
+
+            if (!string.IsNullOrEmpty(job.FROMSERVER) && job.FROMSERVER.Length > 50)
+                errors.Add("検索先データベース名が無効です（50文字以内）");
 
             return new ValidationResult(errors.Count == 0, errors);
         }

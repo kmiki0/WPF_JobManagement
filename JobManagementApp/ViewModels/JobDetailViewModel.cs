@@ -152,9 +152,19 @@ namespace JobManagementApp.ViewModels
         }
 
         // 運用処理管理R 検索用サーバー コンボボックス
-        public Array cmbFromServer;
-        private string _selectedFromServer;
-        public string SelectedFromServer
+        private DatabaseDisplayInfo[] _cmbFromServer;
+        public DatabaseDisplayInfo[] cmbFromServer
+        {
+            get { return _cmbFromServer; }
+            set
+            {
+                _cmbFromServer = value;
+                OnPropertyChanged(nameof(cmbFromServer));
+            }
+        }
+
+        private DatabaseDisplayInfo _selectedFromServer;
+        public DatabaseDisplayInfo SelectedFromServer
         {
             get { return _selectedFromServer; }
             set
@@ -200,6 +210,9 @@ namespace JobManagementApp.ViewModels
             CloseCommand = new RelayCommand(_command.CloseButton_Click);
             DeleteCommand = new RelayCommand(_command.DeleteButton_Click);
             ScenarioLostFocusCommand = new RelayCommand(_command.ScenarioTextBox_LostFocus);
+
+            // JobDetailCommandでデータベース名一覧を取得
+            _command.LoadDatabaseNames();
         }
 
         /// <summary>
@@ -217,6 +230,9 @@ namespace JobManagementApp.ViewModels
             UpdateCommand = new RelayCommand(_command.UpdateButton_Click);
             CloseCommand = new RelayCommand(_command.CloseButton_Click);
             DeleteCommand = new RelayCommand(_command.DeleteButton_Click);
+
+            // JobDetailCommandでデータベース名一覧を取得
+            _command.LoadDatabaseNames();
 
             // データ取得して画面に表示
             if (!string.IsNullOrEmpty(this.Scenario) && !string.IsNullOrEmpty(this.Eda))

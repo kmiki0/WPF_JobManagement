@@ -21,8 +21,8 @@ namespace JobManagementApp.Models
         Task<bool> UpdateJobManegment(JobManegment job);
         // ジョブ管理テーブル 削除
         Task<bool> DeleteJobManegment(string scenario, string eda);
-
-
+        // 利用可能なデータベース名一覧 取得
+        Task<DatabaseDisplayInfo[]> GetAvailableDatabaseDisplayInfos();
     }
 
     public class JobDetailModel : IJobDetailModel
@@ -77,7 +77,8 @@ namespace JobManagementApp.Models
                         JOBBOOLEAN = int.Parse(x.Result.Rows[0]["JOBBOOLEAN"].ToString()),
                         RECEIVE = x.Result.Rows[0]["Receive"].ToString(),
                         SEND = x.Result.Rows[0]["SEND"].ToString(),
-                        MEMO = x.Result.Rows[0]["MEMO"].ToString().Replace("\\n", Environment.NewLine)
+                        MEMO = x.Result.Rows[0]["MEMO"].ToString().Replace("\\n", Environment.NewLine),
+                        FROMSERVER = x.Result.Rows[0]["FROMSERVER"]?.ToString() ?? ""
                     };
                 }
                 else
@@ -86,11 +87,49 @@ namespace JobManagementApp.Models
                     return new JobManegment();
                 }
             });
-
-             
         }
 
+        /// <summary> 
+        /// 利用可能なデータベース名一覧を取得
+        /// </summary> 
+        public async Task<DatabaseDisplayInfo[]> GetAvailableDatabaseDisplayInfos()
+        {
+            return await Task.Run(() =>
+            {
+                return JobService.GetAvailableDatabaseDisplayInfos();
+            }).ContinueWith(x =>
+            {
+                if (x.Result != null && x.Result.Length > 0)
+                {
+                    return x.Result;
+                }
+                else
+                {
+                    ErrLogFile.WriteLog("GetAvailableDatabaseDisplayInfos: データベース情報が取得できませんでした");
+                    return new DatabaseDisplayInfo[0];
+                }
+            });
+        }
 
+        public async Task<string[]> GetAvailableDatabaseNames()
+        {
+            return await Task.Run(() =>
+            {
+                return JobService.GetAvailableDatabaseNames();
+            }).ContinueWith(x =>
+            {
+                if (x.Result != null && x.Result.Length > 0)
+                {
+                    LogFile.WriteLog($"GetAvailableDatabaseNames: {x.Result.Length}件のデータベース名を取得しました");
+                    return x.Result;
+                }
+                else
+                {
+                    ErrLogFile.WriteLog("GetAvailableDatabaseNames: データベース名が取得できませんでした");
+                    return new string[0];
+                }
+            });
+        }
 
         /// <summary> 
         /// ジョブ管理テーブル 更新
@@ -119,6 +158,5 @@ namespace JobManagementApp.Models
                 return x.Result;
             });
         }
-
     }
 }

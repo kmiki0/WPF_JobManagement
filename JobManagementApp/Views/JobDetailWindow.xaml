@@ -151,13 +151,7 @@
 
             <!-- ジョブ状況確認方法 -->
             <Label Grid.Row="9" Grid.Column="2" Grid.ColumnSpan="3" Margin="10, 0, 0, 0" Content="運用処理管理　検索先指定" />
-            <ComboBox Grid.Row="10" Grid.Column="3" Grid.ColumnSpan="2" Width="308" ItemsSource="{Binding cmbFromServer}" SelectedItem="{Binding SelectedFromServer}" >
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding Converter={StaticResource statusToJapaneseConverter}}" />
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+            <ComboBox Grid.Row="10" Grid.Column="3" Grid.ColumnSpan="2" Width="308" ItemsSource="{Binding cmbFromServer}" SelectedItem="{Binding SelectedFromServer}" DisplayMemberPath="DisplayText" />
         </Grid>
 
         <Grid Margin="13, 8, 20, 0">
