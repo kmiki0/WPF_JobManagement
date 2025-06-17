@@ -111,26 +111,6 @@ namespace JobManagementApp.Models
             });
         }
 
-        public async Task<string[]> GetAvailableDatabaseNames()
-        {
-            return await Task.Run(() =>
-            {
-                return JobService.GetAvailableDatabaseNames();
-            }).ContinueWith(x =>
-            {
-                if (x.Result != null && x.Result.Length > 0)
-                {
-                    LogFile.WriteLog($"GetAvailableDatabaseNames: {x.Result.Length}件のデータベース名を取得しました");
-                    return x.Result;
-                }
-                else
-                {
-                    ErrLogFile.WriteLog("GetAvailableDatabaseNames: データベース名が取得できませんでした");
-                    return new string[0];
-                }
-            });
-        }
-
         /// <summary> 
         /// ジョブ管理テーブル 更新
         /// </summary> 
