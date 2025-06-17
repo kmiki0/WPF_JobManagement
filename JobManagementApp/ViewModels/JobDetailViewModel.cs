@@ -11,6 +11,7 @@ using JobManagementApp.Services;
 using System.Windows;
 using System.ComponentModel;
 using System.Data;
+using JobManagementApp.Manager;
 
 namespace JobManagementApp.ViewModels
 {
@@ -279,16 +280,12 @@ namespace JobManagementApp.ViewModels
             {
                 if (_isDisposed) return;
 
-                LogFile.WriteLog($"JobDetailViewModel破棄開始: {Scenario}/{Eda}");
-
                 // イベントハンドラーをクリア
                 RequestClose = null;
 
                 // ウィンドウ参照をクリア
                 window = null;
-
                 _isDisposed = true;
-                LogFile.WriteLog($"JobDetailViewModel破棄完了: {Scenario}/{Eda}");
             }
             catch (Exception ex)
             {

@@ -9,6 +9,9 @@ using JobManagementApp.BaseClass;
 using System.Linq;
 using JobManagementApp.Manager;
 using Microsoft.Extensions.DependencyInjection;
+using System.Windows;
+using Application = System.Windows.Application;
+using MessageBox = System.Windows.Forms.MessageBox;
 
 namespace JobManagementApp.Commands
 {
@@ -78,8 +81,6 @@ namespace JobManagementApp.Commands
             catch (Exception ex)
             {
                 ErrLogFile.WriteLog($"DetailButton_Click エラー: {ex.Message}");
-                MessageBox.Show("詳細画面の表示中にエラーが発生しました。", "エラー", 
-                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
