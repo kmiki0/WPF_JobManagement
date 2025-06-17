@@ -266,8 +266,6 @@ namespace JobManagementApp.Services
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
-
-                LogFile.WriteLog($"GetJobManegment: {scenario}/{eda} のジョブ情報を取得しました");
             }
             catch (Exception e)
             {
@@ -420,8 +418,6 @@ namespace JobManagementApp.Services
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
-
-                LogFile.WriteLog($"GetDistinctForRecvSend: {dt.Rows.Count}件の受信先・送信先を取得しました");
             }
             catch (Exception e)
             {
@@ -693,8 +689,6 @@ namespace JobManagementApp.Services
                 {
                     throw new Exception("ORACLE データ取得エラー");
                 }
-
-                LogFile.WriteLog($"LoadJobs: {dt.Rows.Count}件のジョブを読み込みました (ユーザー: {userId ?? "全件"})");
             }
             catch (Exception e)
             {

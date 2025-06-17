@@ -59,8 +59,6 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-
-        
         
     </Window.Resources>
 
@@ -69,6 +67,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="105" />
                 <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="50" />
                 <ColumnDefinition Width="50" />
                 <ColumnDefinition Width="4*" />
             </Grid.ColumnDefinitions>
@@ -103,7 +102,6 @@
             <Label Grid.Row="3" Grid.Column="0" Content="ジョブ名"/>
             <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Name}"/>
 
-              
             <!-- 実行方法  Execution -->
             <Label Grid.Row="4" Grid.Column="0" Content="実行方法"/>
             <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding cmbExecution}" SelectedItem="{Binding SelectedExecution}" >
@@ -149,8 +147,17 @@
 
             <!-- メモ ラベル -->
             <Label Grid.Row="0" Grid.Column="2" Content="メモ" Margin="10, 0, 0, 0" />
-            <TextBox Grid.Row="0" Grid.Column="3" Grid.RowSpan="11" Text="{Binding Memo}" Width="Auto" Height="Auto" Margin="0, 10, 10, 10" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" TextWrapping="Wrap" AcceptsReturn="True" />
+            <TextBox Grid.Row="0" Grid.Column="3" Grid.ColumnSpan="2" Grid.RowSpan="9" Text="{Binding Memo}" Width="Auto" Height="Auto" Margin="0, 5, 10, 5" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" TextWrapping="Wrap" AcceptsReturn="True" />
 
+            <!-- ジョブ状況確認方法 -->
+            <Label Grid.Row="9" Grid.Column="2" Grid.ColumnSpan="3" Margin="10, 0, 0, 0" Content="運用処理管理　検索先指定" />
+            <ComboBox Grid.Row="10" Grid.Column="3" Grid.ColumnSpan="2" Width="308" ItemsSource="{Binding cmbFromServer}" SelectedItem="{Binding SelectedFromServer}" >
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Converter={StaticResource statusToJapaneseConverter}}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
         </Grid>
 
         <Grid Margin="13, 8, 20, 0">

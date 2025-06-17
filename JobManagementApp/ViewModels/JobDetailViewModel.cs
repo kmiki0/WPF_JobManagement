@@ -151,6 +151,19 @@ namespace JobManagementApp.ViewModels
             }
         }
 
+        // 運用処理管理R 検索用サーバー コンボボックス
+        public Array cmbFromServer;
+        private string _selectedFromServer;
+        public string SelectedFromServer
+        {
+            get { return _selectedFromServer; }
+            set
+            {
+                _selectedFromServer = value;
+                OnPropertyChanged(nameof(SelectedFromServer));
+            }
+        }
+
         // 登録ボタン
         public ICommand UpdateCommand { get; set; }
         // 削除ボタン

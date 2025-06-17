@@ -106,7 +106,6 @@ namespace JobManagementApp.Manager
                 LoadDatabaseSettings();
 
                 _isInitialized = true;
-                LogFile.WriteLog("DatabaseManager コンポーネントの初期化が完了しました");
             }
             catch (Exception ex)
             {
@@ -249,8 +248,6 @@ namespace JobManagementApp.Manager
         {
             try
             {
-                LogFile.WriteLog($"データベース接続を開始します: {databaseName}");
-
                 var dbSettings = _databaseSettings[databaseName];
 
                 // 既存の接続をクローズ
@@ -263,7 +260,7 @@ namespace JobManagementApp.Manager
                 var connection = new OracleConnection(connectionString);
                 connection.Open();
 
-                // 🆕 スキーマが設定されている場合、セッションスキーマを変更
+                // スキーマが設定されている場合、セッションスキーマを変更
                 if (dbSettings.HasSchema())
                 {
                     SetSessionSchema(connection, dbSettings);
@@ -302,7 +299,6 @@ namespace JobManagementApp.Manager
                                      $"Min Pool Size=1;" +
                                      $"Max Pool Size=10;";
 
-                LogFile.WriteLog($"接続文字列を生成しました : Data Source={dbSettings.Address}:{dbSettings.Port}/{dbSettings.ServiceName};User Id={dbSettings.UserId};...");
                 return connectionString;
             }
             catch (Exception ex)
@@ -396,53 +392,6 @@ namespace JobManagementApp.Manager
         }
 
         /// <summary>
-        /// データベース接続の再確立
-        /// </summary>
-        public bool TryReconnect(string databaseName = null)
-        {
-            if (_disposed)
-            {
-                ErrLogFile.WriteLog("DatabaseManager は既に破棄されています");
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(databaseName))
-            {
-                databaseName = _currentDatabaseName;
-            }
-
-            lock (_connectionLock)
-            {
-                try
-                {
-                    LogFile.WriteLog($"データベース再接続を試行します: {databaseName}");
-
-                    // 既存の接続をクローズ
-                    CloseConnectionSafely(databaseName);
-
-                    // 新規接続を試行
-                    var result = TryConnect(databaseName);
-                    
-                    if (result)
-                    {
-                        LogFile.WriteLog($"データベース再接続が成功しました: {databaseName}");
-                    }
-                    else
-                    {
-                        ErrLogFile.WriteLog($"データベース再接続に失敗しました: {databaseName}");
-                    }
-                    
-                    return result;
-                }
-                catch (Exception ex)
-                {
-                    ErrLogFile.WriteLog($"TryReconnect エラー ({databaseName}): {ex.Message}");
-                    return false;
-                }
-            }
-        }
-
-        /// <summary>
         /// 安全な接続クローズ
         /// </summary>
         private void CloseConnectionSafely(string databaseName)
@@ -458,7 +407,6 @@ namespace JobManagementApp.Manager
                     }
                     connection.Dispose();
                     _connections[databaseName] = null;
-                    LogFile.WriteLog($"データベース接続を安全にクローズしました: {databaseName}");
                 }
             }
             catch (Exception ex)
@@ -551,7 +499,7 @@ namespace JobManagementApp.Manager
                     }
                 }
 
-                LogFile.WriteLog($"SELECT実行成功 ({databaseName}): {dataTable.Rows.Count}件取得");
+                LogFile.WriteLog($"{dataTable.Rows.Count}件 = {sql.Replace("\r\n", " ").Replace("\n", " ")}");
                 return true;
             }
             catch (Exception ex)
@@ -624,7 +572,8 @@ namespace JobManagementApp.Manager
                         transaction.Commit();
                     }
 
-                    LogFile.WriteLog($"NonQuery実行成功 ({databaseName}): {rowsAffected}行影響");
+                    ErrLogFile.WriteLog($"SQL: {sql}");
+                    LogFile.WriteLog($"({databaseName}): {rowsAffected}行影響");
                     return true;
                 }
             }
@@ -697,7 +646,6 @@ namespace JobManagementApp.Manager
                     }
 
                     var result = cmd.ExecuteScalar();
-                    LogFile.WriteLog($"ExecuteScalar実行成功 ({databaseName})");
                     return result;
                 }
             }
@@ -808,8 +756,6 @@ namespace JobManagementApp.Manager
                 {
                     lock (_connectionLock)
                     {
-                        LogFile.WriteLog("DatabaseManager のリソース解放を開始します");
-
                         // 全てのデータベース接続をクローズ
                         foreach (var databaseName in _connections.Keys.ToArray())
                         {
@@ -823,8 +769,6 @@ namespace JobManagementApp.Manager
 
                         _isInitialized = false;
                         _disposed = true;
-
-                        LogFile.WriteLog("DatabaseManager のリソース解放が完了しました");
                     }
                 }
                 catch (Exception ex)
@@ -898,33 +842,6 @@ namespace JobManagementApp.Manager
             {
                 _instance?.Dispose();
                 _instance = null;
-            }
-        }
-
-        /// <summary>
-        /// デバッグ情報の出力
-        /// </summary>
-        public void LogDebugInfo()
-        {
-            try
-            {
-                var stats = GetConnectionStatistics();
-                
-                LogFile.WriteLog($"DatabaseManager Debug Info:");
-                LogFile.WriteLog($"  Initialized: {stats.IsInitialized}");
-                LogFile.WriteLog($"  Current Database: {stats.CurrentDatabase}");
-                LogFile.WriteLog($"  Total Databases: {stats.DatabaseCount}");
-                LogFile.WriteLog($"  Connected Databases: {string.Join(", ", stats.ConnectedDatabases)}");
-                
-                foreach (var dbName in GetAvailableDatabaseNames())
-                {
-                    var config = GetDatabaseConfiguration(dbName);
-                    LogFile.WriteLog($"  [{dbName}] {config?.DataSource} (User: {config?.UserId})");
-                }
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"LogDebugInfo エラー: {ex.Message}");
             }
         }
 

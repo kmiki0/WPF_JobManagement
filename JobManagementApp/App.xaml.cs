@@ -95,7 +95,6 @@ namespace JobManagementApp
                 ConfigureApplication();
 
                 _isInitialized = true;
-                LogFile.WriteLog("アプリケーションの初期化が完了しました");
             }
             catch (Exception ex)
             {
@@ -119,15 +118,11 @@ namespace JobManagementApp
                     _isShuttingDown = true;
                 }
 
-                LogFile.WriteLog("アプリケーション終了処理を開始します");
-
                 // リソースのクリーンアップ
                 PerformCleanup();
 
                 // 統計情報の出力
                 LogApplicationStatistics();
-
-                LogFile.WriteLog("アプリケーション終了処理が完了しました");
             }
             catch (Exception ex)
             {
@@ -147,8 +142,6 @@ namespace JobManagementApp
         {
             try
             {
-                LogFile.WriteLog($"セッション終了要求: {e.ReasonSessionEnding}");
-                
                 // 緊急クリーンアップ
                 PerformEmergencyCleanup();
                 
@@ -179,8 +172,6 @@ namespace JobManagementApp
 
                 // Taskの未処理例外
                 TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
-
-                LogFile.WriteLog("グローバル例外ハンドラーを設定しました");
             }
             catch (Exception ex)
             {
@@ -202,7 +193,6 @@ namespace JobManagementApp
                 if (handled)
                 {
                     _handledExceptions++;
-                    LogFile.WriteLog("UIスレッド例外を処理しました - アプリケーションは継続します");
                 }
                 else
                 {
@@ -249,10 +239,7 @@ namespace JobManagementApp
         {
             try
             {
-                LogCriticalError($"Task未処理例外: {e.Exception?.Message}");
-                
-
-                e.SetObserved(); // 例外を観測済みとしてマーク
+                e.SetObserved();
                 _handledExceptions++;
             }
             catch (Exception ex)
@@ -277,13 +264,7 @@ namespace JobManagementApp
                 // コアサービスの登録
                 services.AddSingleton<IFileWatcherManager, FileWatcherManager>();
                 
-                // 将来の拡張用
-                // services.AddSingleton<ILoggingService, LoggingService>();
-                // services.AddSingleton<IConfigurationService, ConfigurationService>();
-                
                 ServiceProvider = services.BuildServiceProvider();
-                
-                LogFile.WriteLog("依存性注入コンテナを設定しました");
             }
             catch (Exception ex)
             {
@@ -298,8 +279,6 @@ namespace JobManagementApp
         {
             try
             {
-                LogFile.WriteLog("データベース初期化を開始します");
-
                 // DatabaseManagerが全ての責任を負う
                 var databaseManager = DatabaseManager.Instance;
                 
@@ -313,8 +292,6 @@ namespace JobManagementApp
                 {
                     throw new InvalidOperationException("データベース接続の確立に失敗しました");
                 }
-
-                LogFile.WriteLog("データベース初期化が完了しました");
             }
             catch (Exception ex)
             {
@@ -341,8 +318,6 @@ namespace JobManagementApp
                 {
                     MainWindow.Title = $"{_applicationName} v{_applicationVersion}";
                 }
-
-                LogFile.WriteLog("アプリケーション設定が完了しました");
             }
             catch (Exception ex)
             {
@@ -362,8 +337,6 @@ namespace JobManagementApp
         {
             try
             {
-                LogFile.WriteLog("リソースのクリーンアップを開始します");
-
                 // FileWatcherManagerの解放
                 CleanupFileWatcherManager();
 
@@ -378,8 +351,6 @@ namespace JobManagementApp
 
                 // ガベージコレクション実行
                 PerformGarbageCollection();
-
-                LogFile.WriteLog("リソースのクリーンアップが完了しました");
             }
             catch (Exception ex)
             {
@@ -394,8 +365,6 @@ namespace JobManagementApp
         {
             try
             {
-                LogFile.WriteLog("緊急クリーンアップを実行します");
-
                 // 最小限の重要なリソース解放のみ
                 try
                 {
@@ -408,8 +377,6 @@ namespace JobManagementApp
                     ServiceProvider?.GetService<IFileWatcherManager>()?.Dispose();
                 }
                 catch { }
-
-                LogFile.WriteLog("緊急クリーンアップが完了しました");
             }
             catch
             {
@@ -464,7 +431,6 @@ namespace JobManagementApp
                 if (ServiceProvider is IDisposable disposableServiceProvider)
                 {
                     disposableServiceProvider.Dispose();
-                    LogFile.WriteLog("ServiceProviderを解放しました");
                 }
             }
             catch (Exception ex)
@@ -529,8 +495,6 @@ namespace JobManagementApp
                 
                 var afterMemory = GC.GetTotalMemory(false);
                 var freedMemory = beforeMemory - afterMemory;
-                
-                LogFile.WriteLog($"ガベージコレクション完了 (解放メモリ: {freedMemory / 1024.0 / 1024.0:F2} MB)");
             }
             catch (Exception ex)
             {
@@ -665,12 +629,9 @@ namespace JobManagementApp
             try
             {
                 LogFile.WriteLog("=".PadLeft(50, '='));
-                LogFile.WriteLog($"{_applicationName} v{_applicationVersion} を開始しました");
                 LogFile.WriteLog($"開始日時: {DateTime.Now:yyyy/MM/dd HH:mm:ss}");
                 LogFile.WriteLog($"プロセスID: {Process.GetCurrentProcess().Id}");
                 LogFile.WriteLog($"ワーキングディレクトリ: {Environment.CurrentDirectory}");
-                LogFile.WriteLog($"CLRバージョン: {Environment.Version}");
-                LogFile.WriteLog($"OSバージョン: {Environment.OSVersion}");
                 LogFile.WriteLog("=".PadLeft(50, '='));
             }
             catch
@@ -728,7 +689,6 @@ namespace JobManagementApp
             try
             {
                 ErrLogFile.WriteLog($"[CRITICAL] {message}");
-                Debug.WriteLine($"[CRITICAL] {message}");
             }
             catch
             {

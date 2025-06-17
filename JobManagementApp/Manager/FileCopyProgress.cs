@@ -50,8 +50,6 @@ namespace JobManagementApp.Manager
             _retryDelay = TimeSpan.FromMilliseconds(Math.Max(100, retryDelayMs));
             
             _activeCopyOperations = new ConcurrentDictionary<string, CopyOperation>();
-            
-            LogFile.WriteLog($"FileCopyProgress を初期化しました (バッファサイズ: {_bufferSize / 1024}KB, リトライ回数: {_maxRetryCount})");
         }
 
         #endregion
@@ -113,7 +111,6 @@ namespace JobManagementApp.Manager
                 if (!ShouldCopyFile(sourceFile, destFile))
                 {
                     OnProgressChanged(sourceFile, destFile, totalSizeKB, 100);
-                    LogFile.WriteLog($"ファイルコピーをスキップしました（既に最新）: {sourceFile}");
                     return CopyResult.Success($"ファイルは既に最新です: {Path.GetFileName(sourceFile)}");
                 }
 
@@ -140,7 +137,6 @@ namespace JobManagementApp.Manager
             }
             catch (OperationCanceledException)
             {
-                LogFile.WriteLog($"ファイルコピーがキャンセルされました: {sourceFile}");
                 return CopyResult.Cancelled();
             }
             catch (Exception ex)
@@ -178,7 +174,6 @@ namespace JobManagementApp.Manager
                 {
                     operation.Cancel();
                 }
-                LogFile.WriteLog($"進行中のコピー操作 {_activeCopyOperations.Count} 件をキャンセルしました");
             }
             catch (Exception ex)
             {
@@ -250,7 +245,6 @@ namespace JobManagementApp.Manager
                     var result = await PerformSingleCopyAsync(operation, cancellationToken);
                     if (result.IsSuccess)
                     {
-                        LogFile.WriteLog($"ファイルコピー完了: {operation.SourceFile} -> {operation.DestFile} (試行回数: {attempt})");
                         return result;
                     }
 
@@ -398,7 +392,6 @@ namespace JobManagementApp.Manager
                         return CopyResult.Failure("ファイル整合性チェックに失敗しました");
                     }
 
-                    LogFile.WriteLog($"ファイル整合性チェック完了: {Path.GetFileName(sourceFile)}");
                     return CopyResult.Success("整合性チェック完了");
                 }
             }
@@ -577,8 +570,6 @@ namespace JobManagementApp.Manager
                 {
                     lock (_lockObject)
                     {
-                        LogFile.WriteLog("FileCopyProgress のリソース解放を開始します");
-
                         // 進行中の操作をキャンセル
                         CancelAllOperations();
 
@@ -592,7 +583,6 @@ namespace JobManagementApp.Manager
                                        $"平均速度: {stats.AverageSpeedMBps:F2}MB/s");
 
                         _disposed = true;
-                        LogFile.WriteLog("FileCopyProgress のリソース解放が完了しました");
                     }
                 }
                 catch (Exception ex)

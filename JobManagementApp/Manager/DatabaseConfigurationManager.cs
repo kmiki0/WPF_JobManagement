@@ -121,8 +121,6 @@ namespace JobManagementApp.Configuration
         {
             try
             {
-                LogFile.WriteLog($"データベース設定ファイルを読み込み中: {_configFilePath}");
-
                 if (!File.Exists(_configFilePath))
                 {
                     throw new FileNotFoundException($"設定ファイルが見つかりません: {_configFilePath}");
@@ -154,7 +152,6 @@ namespace JobManagementApp.Configuration
                         }
                         
                         var schemaInfo = settings.HasSchema() ? $" (スキーマ: {settings.Schema})" : "";
-                        LogFile.WriteLog($"データベース設定を読み込みました: {settings.Name} ({settings.Address}/{settings.ServiceName})");
                     }
                     else
                     {
@@ -166,8 +163,6 @@ namespace JobManagementApp.Configuration
                 {
                     throw new InvalidOperationException("有効なデータベース設定が見つかりませんでした");
                 }
-
-                LogFile.WriteLog($"データベース設定の読み込みが完了しました。設定数: {_databases.Count}");
             }
             catch (Exception ex)
             {
@@ -289,25 +284,7 @@ namespace JobManagementApp.Configuration
         }
 
         /// <summary>
-        /// 設定ファイルを再読み込み
-        /// </summary>
-        public void ReloadConfiguration()
-        {
-            try
-            {
-                LogFile.WriteLog("データベース設定を再読み込みします");
-                LoadConfiguration();
-                LogFile.WriteLog("データベース設定の再読み込みが完了しました");
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"データベース設定の再読み込みエラー: {ex.Message}");
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// 設定情報をログに出力（パスワードは除く）- スキーマ対応版
+        /// 設定情報をログに出力
         /// </summary>
         public void LogConfigurationInfo()
         {
@@ -360,7 +337,6 @@ namespace JobManagementApp.Configuration
                     }
                 }
 
-                LogFile.WriteLog("データベース設定の検証が完了しました");
                 return true;
             }
             catch (Exception ex)
