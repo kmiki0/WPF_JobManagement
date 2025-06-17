@@ -204,6 +204,17 @@ namespace JobManagementApp.Commands
                 ExecuteFullRefreshProcess();
             }
         }
+        
+        /// <summary>
+        /// 検索条件が設定されているかチェック
+        /// </summary>
+        private bool HasSearchConditions()
+        {
+            return !string.IsNullOrWhiteSpace(_vm.Scenario) ||
+                !string.IsNullOrWhiteSpace(_vm.JobId) ||
+                !string.IsNullOrWhiteSpace(_vm.SelectedRecv) ||
+                !string.IsNullOrWhiteSpace(_vm.SelectedSend);
+        }
 
         /// <summary>
         /// 検索処理を実行（SearchButton_Clickと同じ処理）
