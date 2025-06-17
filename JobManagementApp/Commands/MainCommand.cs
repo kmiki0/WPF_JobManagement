@@ -180,6 +180,7 @@ namespace JobManagementApp.Commands
             }
         }
 
+    # region RefreshButton
         /// <summary> 
         /// 画面更新　押下イベント
         /// </summary> 
@@ -189,14 +190,136 @@ namespace JobManagementApp.Commands
             if (!_vm.IsButtonEnabled) return;
             _vm.IsButtonEnabled = false;
 
-            Task.Run(() => CreateJobList()).ContinueWith(x => { 
-                // ボタン使用可に戻す
-                _vm.IsButtonEnabled = true;
-            });
-            // 項目初期化
-            _vm.IsExpanded = false;
+            // 検索条件があるかチェック
+            bool hasSearchConditions = HasSearchConditions();
 
+            if (hasSearchConditions)
+            {
+                // 検索条件がある場合は検索処理を実行
+                ExecuteSearchProcess();
+            }
+            else
+            {
+                // 検索条件がない場合は従来の全件更新処理
+                ExecuteFullRefreshProcess();
+            }
         }
+
+        /// <summary>
+        /// 検索処理を実行（SearchButton_Clickと同じ処理）
+        /// </summary>
+        private void ExecuteSearchProcess()
+        {
+            try
+            {
+                // 日付範囲検証を追加
+                if (!ValidateDateRange(_vm.SearchFromDate, _vm.SearchToDate))
+                {
+                    _vm.IsButtonEnabled = true; // ボタンを再有効化
+                    return;
+                }
+
+                // TreeView状態　初期化
+                _vm.IsExpanded = false;
+
+                _if.GetSearchJobList(_vm.Scenario, _vm.JobId, _vm.SelectedRecv, _vm.SelectedSend).ContinueWith(x =>
+                {
+                    // データが取得出来ない場合
+                    if (x.Result.Count <= 0)
+                    {
+                        MessageBox.Show("検索条件に合う ジョブが見つかりませんでした。",
+                            "メッセージ", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                    }
+                    else
+                    {
+                        // シナリオごとにグルーピング
+                        var groupingList = x.Result.GroupBy(y => y.Scenario);
+                        var allList = new List<JobListItemViewModel>();
+                        foreach (var group in groupingList)
+                        {
+                            allList.Add(new JobListItemViewModel
+                            {
+                                IsScenarioGroup = true,
+                                Scenario = "",
+                                Eda = "",
+                                Id = group.Key,
+                                Name = ConvertScenarioJapanese(group.Key),
+                                Children = new ObservableCollection<JobListItemViewModel>(group.ToList())
+                            });
+                        }
+
+                        _vm.Jobs = new ObservableCollection<JobListItemViewModel>(allList);
+
+                        // 運用処理管理Rの検索
+                        GetUnyoCtlData();
+                    }
+
+                    // ボタン使用可に戻す
+                    _vm.IsButtonEnabled = true;
+                });
+
+                // キャッシュ保存処理（SearchButton_Clickと同じ）
+                SaveSearchCache();
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ExecuteSearchProcess エラー: {ex.Message}");
+                _vm.IsButtonEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// 全件更新処理を実行（従来のRefreshButton_Click処理）
+        /// </summary>
+        private void ExecuteFullRefreshProcess()
+        {
+            try
+            {
+                Task.Run(() => CreateJobList()).ContinueWith(x => { 
+                    // ボタン使用可に戻す
+                    _vm.IsButtonEnabled = true;
+                });
+                // 項目初期化
+                _vm.IsExpanded = false;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ExecuteFullRefreshProcess エラー: {ex.Message}");
+                _vm.IsButtonEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// 検索キャッシュの保存処理
+        /// </summary>
+        private void SaveSearchCache()
+        {
+            try
+            {
+                UserFileManager manager = new UserFileManager();
+                // 読み込みユーザー
+                if (manager.GetCache(manager.CacheKey_UserId) != _vm.UserId)
+                {
+                    manager.SaveCache(manager.CacheKey_UserId, _vm.UserId);
+                }
+                // 検索日付 From
+                DateTime date;
+                if (DateTime.TryParse(_vm.SearchFromDate, out date))
+                {
+                    var saveTime = date.Hour.ToString("00") + ":" + date.Minute.ToString("00");
+                    if (manager.GetCache(manager.CacheKey_SearchTime) != saveTime)
+                    {
+                        manager.SaveCache(manager.CacheKey_SearchTime, saveTime);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"SaveSearchCache エラー: {ex.Message}");
+            }
+        }
+
+    # endregion
 
         /// <summary> 
         /// ジョブ追加　押下イベント
