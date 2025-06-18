@@ -264,8 +264,114 @@ namespace JobManagementApp.Commands
         }
 
         /// <summary>
-        /// ファイル進行状況変更イベント - デバッグ強化版
+        /// ファイル進行状況変更イベント
         /// </summary>
+        private void OnFileProgressChanged(string filePath, string destPath, int totalSize, int percent)
+        {
+            try
+            {
+                LogInfo logInfo = null;
+                
+                // 1. 完全一致で検索
+                logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => 
+                    string.Equals(Path.GetFullPath(x.LogFromPath), Path.GetFullPath(filePath), StringComparison.OrdinalIgnoreCase));
+                
+                // 2. 完全一致で見つからない場合、ファイル名ベースで検索
+                if (logInfo == null)
+                {
+                    var targetFileName = Path.GetFileName(filePath);
+                    logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => 
+                        string.Equals(Path.GetFileName(x.LogFromPath), targetFileName, StringComparison.OrdinalIgnoreCase));
+                }
+                
+                // 3. マルチファイルの場合、ベースファイル名で検索
+                if (logInfo == null)
+                {
+                    var baseFileName = ExtractBaseFileName(Path.GetFileName(filePath));
+                    logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => 
+                    {
+                        var registeredBaseFileName = ExtractBaseFileName(Path.GetFileName(x.LogFromPath));
+                        return string.Equals(registeredBaseFileName, baseFileName, StringComparison.OrdinalIgnoreCase);
+                    });
+                }
+                
+                // 4. それでも見つからない場合、JobIDベースで検索
+                if (logInfo == null)
+                {
+                    var directory = Path.GetDirectoryName(filePath);
+                    logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => 
+                        string.Equals(Path.GetDirectoryName(x.LogFromPath), directory, StringComparison.OrdinalIgnoreCase));
+                }
+                
+                if (logInfo == null) { return; }
+
+                var watchingKey = GetWatchingKey(logInfo, filePath);
+                var watchingInfo = _watchingFiles.GetOrAdd(watchingKey, _ => new FileWatchingInfo(logInfo, filePath));
+
+                if (logInfo.IsMultiFile)
+                {
+                    // マルチファイル処理
+                    HandleMultiFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
+                }
+                else
+                {
+                    // シングルファイル処理
+                    HandleSingleFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"OnFileProgressChanged エラー: {ex.Message}");
+                ErrLogFile.WriteLog($"対象ファイル: {filePath}");
+            }
+        }
+
+        /// <summary>
+        /// 基本ファイル名を抽出（日付プレフィックスを除去）- 強化版
+        /// </summary>
+        private string ExtractBaseFileName(string fileName)
+        {
+            try
+            {
+                // ファイル名が空の場合
+                if (string.IsNullOrEmpty(fileName))
+                {
+                    return fileName;
+                }
+
+                // パターン1: yyyymmddhhmmss_ファイル名.拡張子
+                var match1 = System.Text.RegularExpressions.Regex.Match(fileName, @"^\d{14}_(.+)$");
+                if (match1.Success)
+                {
+                    var result = match1.Groups[1].Value;
+                    return result;
+                }
+
+                // パターン2: yyyymmddhhmmssファイル名.拡張子（アンダーバーなし）
+                var match2 = System.Text.RegularExpressions.Regex.Match(fileName, @"^\d{14}(.+)$");
+                if (match2.Success)
+                {
+                    var result = match2.Groups[1].Value;
+                    return result;
+                }
+
+                // パターン3: yyyymmdd_ファイル名.拡張子
+                var match3 = System.Text.RegularExpressions.Regex.Match(fileName, @"^\d{8}_(.+)$");
+                if (match3.Success)
+                {
+                    var result = match3.Groups[1].Value;
+                    return result;
+                }
+
+                return fileName;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"ExtractBaseFileName エラー: {ex.Message}");
+                return fileName; // エラー時は元のファイル名を返す
+            }
+        }
+
         private void OnFileProgressChanged(string filePath, string destPath, int totalSize, int percent)
         {
             try

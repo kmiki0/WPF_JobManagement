@@ -124,7 +124,7 @@ namespace JobManagementApp.Manager
         }
 
         /// <summary>
-        /// (複数ファイル用) FileWatcherに登録 - 初回即座コピー対応版
+        /// (複数ファイル用) FileWatcherに登録
         /// </summary>
         /// <param name="info">ログ情報</param>
         private async Task AddMultiFileToWatch(LogInfo info)
@@ -141,12 +141,12 @@ namespace JobManagementApp.Manager
 
             _fw.AddSingleWatcher(info.LogFromPath, watcher);
 
-            // 初回は既存ファイルを即座にコピー
+            // 初回実行
             await InitialCopyExistingFiles(info);
         }
 
         /// <summary>
-        /// 初回のみ：既存ファイルを即座にコピー
+        /// 既存ファイルを即座にコピー
         /// </summary>
         private async Task InitialCopyExistingFiles(LogInfo info)
         {
@@ -166,11 +166,11 @@ namespace JobManagementApp.Manager
                         IsMultiFile = true
                     };
                     
-                    // コピー
-                    await HandleFileCopy(fileLogInfo);
-                    
-                    // FileWatcher登録のみ（コピーなし）
+                    // FileWatcher登録とLogInfo登録
                     RegisterFileWatcherOnly(fileLogInfo);
+                    
+                    // コピー実行
+                    await HandleFileCopy(fileLogInfo);
                 }
             }
             catch (Exception ex)
@@ -180,28 +180,35 @@ namespace JobManagementApp.Manager
         }
 
         /// <summary>
-        /// FileWatcher登録のみ
+        /// FileWatcher登録のみ（コピーは行わない）- ログ強化版
         /// </summary>
         private void RegisterFileWatcherOnly(LogInfo info)
         {
-            var watcher = new FileSystemWatcher(Path.GetDirectoryName(info.LogFromPath))
+            try
             {
-                Filter = Path.GetFileName(info.LogFromPath),
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-            };
+                var watcher = new FileSystemWatcher(Path.GetDirectoryName(info.LogFromPath))
+                {
+                    Filter = Path.GetFileName(info.LogFromPath),
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+                };
 
-            watcher.Changed += async (sender, e) => await OnChanged(info);
-            watcher.EnableRaisingEvents = true;
+                watcher.Changed += async (sender, e) => await OnChanged(info);
+                watcher.EnableRaisingEvents = true;
 
-            if (info.IsMultiFile)
-            {
-                _fw.AddMultiWatcher(info.LogFromPath, watcher);
-                _fw.AddLogInfo(info.LogFromPath, info);
+                if (info.IsMultiFile)
+                {
+                    _fw.AddMultiWatcher(info.LogFromPath, watcher);
+                    _fw.AddLogInfo(info.LogFromPath, info);
+                }
+                else
+                {
+                    _fw.AddSingleWatcher(info.LogFromPath, watcher);
+                    _fw.AddLogInfo(info.LogFromPath, info);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                _fw.AddSingleWatcher(info.LogFromPath, watcher);
-                _fw.AddLogInfo(info.LogFromPath, info);
+                ErrLogFile.WriteLog($"RegisterFileWatcherOnly エラー: {ex.Message}");
             }
         }
 
@@ -294,37 +301,54 @@ namespace JobManagementApp.Manager
         // 指定した件数分、ファイル情報を取得
         public List<FileInfo> GetLatestFiles(string fullPath, int fileCount)
         {
-            var directory = new DirectoryInfo(Path.GetDirectoryName(fullPath));
-            return directory.GetFiles()
-                .Where(t => t.LastWriteTime >= _fromDateTime && 
-                        t.LastWriteTime <= _toDateTime)  // 🆕 ToDateでも絞り込み
-                .Where(f => f.Name.Contains(Path.GetFileName(fullPath)))
-                .OrderByDescending(f => f.LastWriteTime)
-                .Take(fileCount)
-                .ToList();
+            try
+            {
+                var directory = new DirectoryInfo(Path.GetDirectoryName(fullPath));
+                var files = directory.GetFiles()
+                    .Where(t => t.LastWriteTime >= _fromDateTime && 
+                            t.LastWriteTime <= _toDateTime)  // ToDateでも絞り込み
+                    .Where(f => f.Name.Contains(Path.GetFileName(fullPath)))
+                    .OrderByDescending(f => f.LastWriteTime)
+                    .Take(fileCount)
+                    .ToList();
+                
+                return files;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"GetLatestFiles エラー: {ex.Message}");
+                return new List<FileInfo>();
+            }
         }
 
         private async Task HandleFileCopy(LogInfo info)
         {
-            // コピー先フォルダパスがセットされていない場合、カレントディレクトリをセット
-            if (string.IsNullOrEmpty(_copyBasePath))
+            try
             {
-                _copyBasePath = AppDomain.CurrentDomain.BaseDirectory;
+                // コピー先フォルダパスがセットされていない場合、カレントディレクトリをセット
+                if (string.IsNullOrEmpty(_copyBasePath))
+                {
+                    _copyBasePath = AppDomain.CurrentDomain.BaseDirectory;
+                }
+
+                // 日付のコピーフォルダパス 作成
+                string todayCopyPath = Path.Combine(_copyBasePath, DateTime.Now.ToString("yyyyMMdd"));
+                string copyPath = Path.Combine(todayCopyPath, info.JobId);
+
+                // コピー先フォルダが存在しない場合、フォルダ 作成
+                if (!Directory.Exists(copyPath)) Directory.CreateDirectory(copyPath);
+
+                // コピー元ファイル
+                string fromFilePath = info.LogFromPath;
+                string toFilePath = Path.Combine(copyPath, Path.GetFileName(info.LogFromPath));
+
+                // コピー実施
+                await _fileCopyProgress.CopyFile(fromFilePath, toFilePath);
             }
-
-            // 日付のコピーフォルダパス 作成
-            string todayCopyPath = Path.Combine(_copyBasePath, DateTime.Now.ToString("yyyyMMdd"));
-            string copyPath = Path.Combine(todayCopyPath, info.JobId);
-
-            // コピー先フォルダが存在しない場合、フォルダ 作成
-            if (!Directory.Exists(copyPath)) Directory.CreateDirectory(copyPath);
-
-            // コピー元ファイル
-            string fromFilePath = info.LogFromPath;
-            string toFilePath = Path.Combine(copyPath, Path.GetFileName(info.LogFromPath));
-
-            // コピー実施
-            await _fileCopyProgress.CopyFile(fromFilePath, toFilePath);
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"HandleFileCopy エラー: {ex.Message}");
+            }
         }
     }
 }
