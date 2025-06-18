@@ -73,21 +73,17 @@ namespace JobManagementApp.Models
 
                         DateTime updateDate = DateTime.ParseExact(updDt, "yyyy/MM/dd H:mm:ss", null);
 
-                        // 更新日付が本日日付のみ処理
-                        if (updateDate.ToString("yyyyMMdd") == DateTime.Now.ToString("yyyyMMdd"))
-                        {
-                            // eunm 対応 （ERROR = 3）
-                            var flg = row["SYRFLG"].ToString();
+                        // eunm 対応 （ERROR = 3）
+                        var flg = row["SYRFLG"].ToString();
 
-                            result.Add(new JobUnyoCtlModel
-                            {
-                                Scenario = row["SCENARIO"].ToString(),
-                                Eda = row["EDA"].ToString(),
-                                Id = row["JOBID"].ToString(),
-                                SyrFlg = flg == "9" ? "3" : flg,
-                                UpdDt = row["UPDDT"].ToString(),
-                            });
-                        }
+                        result.Add(new JobUnyoCtlModel
+                        {
+                            Scenario = row["SCENARIO"].ToString(),
+                            Eda = row["EDA"].ToString(),
+                            Id = row["JOBID"].ToString(),
+                            SyrFlg = flg == "9" ? "3" : flg,
+                            UpdDt = row["UPDDT"].ToString(),
+                        });
                     }
                 }
             });

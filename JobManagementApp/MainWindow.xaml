@@ -119,12 +119,12 @@
                     <!-- [検索] シナリオ -->
                     <Label Grid.Column="0" Grid.Row="0" VerticalAlignment="Center">シナリオ</Label>
                     <TextBox Grid.Column="1" Grid.Row="0" VerticalAlignment="Center" Text="{Binding Scenario}"
-                             ToolTip="' '（スペース）で区切ることで、複数検索出来ます"/>
+                             ToolTip="','（カンマ）で区切ることで、複数検索出来ます"/>
 
                     <!-- [検索] ジョブID -->
                     <Label Grid.Column="3" Grid.Row="0" VerticalAlignment="Center">ジョブID</Label>
                     <TextBox Grid.Column="4" Grid.Row="0" VerticalAlignment="Center" Text="{Binding JobId}"
-                             ToolTip="' '（スペース）で区切ることで、複数検索出来ます"/>
+                             ToolTip="','（カンマ）で区切ることで、複数検索出来ます"/>
 
                     <!-- [検索] 受信先 -->
                     <Label Grid.Column="0" Grid.Row="1" VerticalAlignment="Center">受信先</Label>
