@@ -31,7 +31,7 @@ namespace JobManagementApp.Manager
         {
             var tasks = new List<Task>();
 
-            // 非同期処理
+            // 非同期処理
             foreach (JobLogItemViewModel log in _logs)
             {
                 // watcher 受渡用の型にセット
@@ -124,10 +124,9 @@ namespace JobManagementApp.Manager
         }
 
         /// <summary>
-        /// (複数ファイル用) FileWatcherに登録 
+        /// (複数ファイル用) FileWatcherに登録 - 初回即座コピー対応版
         /// </summary>
-        /// <param name="fullPath">対象のファイルパス</param>
-        /// <param name="fileCount">範囲検索するファイル数</param>
+        /// <param name="info">ログ情報</param>
         private async Task AddMultiFileToWatch(LogInfo info)
         {
             // （前方一致）ファイル名
@@ -142,18 +141,78 @@ namespace JobManagementApp.Manager
 
             _fw.AddSingleWatcher(info.LogFromPath, watcher);
 
-            // 初回は起動する
-            await OnMultiFileChanged(info);
+            // 初回は既存ファイルを即座にコピー
+            await InitialCopyExistingFiles(info);
         }
 
-        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new ConcurrentDictionary<string, SemaphoreSlim>();
+        /// <summary>
+        /// 初回のみ：既存ファイルを即座にコピー
+        /// </summary>
+        private async Task InitialCopyExistingFiles(LogInfo info)
+        {
+            try
+            {
+                // 既存の対象ファイルを取得
+                List<FileInfo> existingFiles = GetLatestFiles(info.LogFromPath, info.FileCount);
+                
+                // 各ファイルを即座にコピー（待機なし）
+                foreach (FileInfo file in existingFiles)
+                {
+                    var fileLogInfo = new LogInfo
+                    {
+                        JobId = info.JobId,
+                        LogFromPath = file.FullName,
+                        FileCount = info.FileCount,
+                        IsMultiFile = true
+                    };
+                    
+                    // コピー
+                    await HandleFileCopy(fileLogInfo);
+                    
+                    // FileWatcher登録のみ（コピーなし）
+                    RegisterFileWatcherOnly(fileLogInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"InitialCopyExistingFiles エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// FileWatcher登録のみ
+        /// </summary>
+        private void RegisterFileWatcherOnly(LogInfo info)
+        {
+            var watcher = new FileSystemWatcher(Path.GetDirectoryName(info.LogFromPath))
+            {
+                Filter = Path.GetFileName(info.LogFromPath),
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            };
+
+            watcher.Changed += async (sender, e) => await OnChanged(info);
+            watcher.EnableRaisingEvents = true;
+
+            if (info.IsMultiFile)
+            {
+                _fw.AddMultiWatcher(info.LogFromPath, watcher);
+                _fw.AddLogInfo(info.LogFromPath, info);
+            }
+            else
+            {
+                _fw.AddSingleWatcher(info.LogFromPath, watcher);
+                _fw.AddLogInfo(info.LogFromPath, info);
+            }
+        }
+
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> fileSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
 
         private async Task OnChanged(LogInfo info)
         {
             if (_isStopped) return;
 
             var key = info.LogFromPath;
-            var semaphore = _fileLocks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+            var semaphore = fileSemaphores.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
 
             await semaphore.WaitAsync();// 多重実行防止
             try
@@ -179,7 +238,7 @@ namespace JobManagementApp.Manager
                 // 使用後に辞書から削除（メモリリーク防止）
                 if (semaphore.CurrentCount == 1)
                 {
-                    _fileLocks.TryRemove(key, out _);
+                    fileSemaphores.TryRemove(key, out _);
                 }
             }
         }
