@@ -58,25 +58,16 @@ namespace JobManagementApp.Manager
             }
 
             // 全てのタスクが完了するまで待機
-            await Task.WhenAll(tasks).ContinueWith(async (x) => {
-
-                if (x.IsCompleted)
-                {
-                    // _watchersの中身に対して並列ダウンロード処理を実行
-                    var downloadTasks = new List<Task>();
-
-                    foreach (var info in _fw.GetAllLogInfos().Values)
-                    {
-                        downloadTasks.Add(HandleFileCopy(info));
-                    }
-
-                    // ダウンロード処理の完了を待つ
-                    await Task.WhenAll(downloadTasks);
-                }
-            });
+            await Task.WhenAll(tasks);
         }
 
-
+        /// <summary>
+        /// コンストラクタ
+        ///  </summary>
+        /// <param name="logs">ログ情報のリスト</param>
+        ///  <param name="copyPath">コピー先のパス</param>
+        ///  <param name="fromDateTime">監視開始日時</param>
+        ///  <param name="toDateTime">監視終了日時</param>
         public MultiFileWatcher(List<JobLogItemViewModel> logs, string copyPath, DateTime fromDateTime, DateTime toDateTime)
         {
             // 初期値 セット
@@ -95,7 +86,10 @@ namespace JobManagementApp.Manager
             };
         }
 
-        // FileWatcherに登録
+        /// <summary>
+        /// FileWatcherに登録
+        ///  </summary>
+        ///  <param name="info">ログ情報</param>
         private async Task AddFileToWatch(LogInfo info)
         {
             var watcher = new FileSystemWatcher(Path.GetDirectoryName(info.LogFromPath))
@@ -107,19 +101,20 @@ namespace JobManagementApp.Manager
             watcher.Changed += async (sender, e) => await OnChanged(info);
             watcher.EnableRaisingEvents = true;
 
-
             if (info.IsMultiFile)
             {
-                // 複数用
+                // 複数用 - InitialCopyExistingFilesでコピー済みのため、ここではコピーしない
                 _fw.AddMultiWatcher(info.LogFromPath, watcher);
                 _fw.AddLogInfo(info.LogFromPath, info);
-                await HandleFileCopy(info);
             }
             else
             {
-                // 通常用
+                // 通常用（LOGタイプ）- 初回コピーが必要
                 _fw.AddSingleWatcher(info.LogFromPath, watcher);
                 _fw.AddLogInfo(info.LogFromPath, info);
+                
+                // LOGタイプは初回即座コピー
+                await HandleFileCopy(info);
             }
         }
 
@@ -141,12 +136,12 @@ namespace JobManagementApp.Manager
 
             _fw.AddSingleWatcher(info.LogFromPath, watcher);
 
-            // 初回実行
+            // 初回は既存ファイルを即座にコピー
             await InitialCopyExistingFiles(info);
         }
 
         /// <summary>
-        /// 既存ファイルを即座にコピー
+        /// 初回：既存ファイルを即座にコピー（並列実行版）
         /// </summary>
         private async Task InitialCopyExistingFiles(LogInfo info)
         {
@@ -155,7 +150,10 @@ namespace JobManagementApp.Manager
                 // 既存の対象ファイルを取得
                 List<FileInfo> existingFiles = GetLatestFiles(info.LogFromPath, info.FileCount);
                 
-                // 各ファイルを即座にコピー（待機なし）
+                // 並列処理用のタスクリスト
+                var copyTasks = new List<Task>();
+                
+                // 各ファイルを即座にコピー（並列実行）
                 foreach (FileInfo file in existingFiles)
                 {
                     var fileLogInfo = new LogInfo
@@ -166,16 +164,41 @@ namespace JobManagementApp.Manager
                         IsMultiFile = true
                     };
                     
-                    // FileWatcher登録とLogInfo登録
+                    // 先にFileWatcher登録とLogInfo登録（同期処理）
                     RegisterFileWatcherOnly(fileLogInfo);
                     
-                    // コピー実行
-                    await HandleFileCopy(fileLogInfo);
+                    // コピーを並列実行用タスクに追加
+                    copyTasks.Add(HandleFileParallelCopy(fileLogInfo, file.Name));
+                }
+                
+                // 全てのコピーを並列実行
+                if (copyTasks.Count > 0)
+                {
+                    await Task.WhenAll(copyTasks);
+                }
+                else
+                {
+                    LogFile.WriteLog("InitialCopyExistingFiles: コピー対象ファイルなし");
                 }
             }
             catch (Exception ex)
             {
                 ErrLogFile.WriteLog($"InitialCopyExistingFiles エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 並列コピー用のハンドラー
+        /// </summary>
+        private async Task HandleFileParallelCopy(LogInfo info, string displayName)
+        {
+            try
+            {
+                await HandleFileCopy(info);
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"HandleFileParallelCopy エラー ({displayName}): {ex.Message}");
             }
         }
 
@@ -212,8 +235,14 @@ namespace JobManagementApp.Manager
             }
         }
 
+        /// <summary>
+        ///  ファイル変更検知イベント
+        ///  </summary>
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> fileSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
 
+        /// <summary>
+        /// ファイル変更検知イベントハンドラー
+        ///  </summary>
         private async Task OnChanged(LogInfo info)
         {
             if (_isStopped) return;
@@ -250,10 +279,11 @@ namespace JobManagementApp.Manager
             }
         }
 
+        /// <summary>
+        /// ファイル情報を取得する（ロックされていないか確認）
+        ///  </summary>
         private async Task<FileInfo> GetFileInfoWithRetry(string path, int retryCount = 5, int delayMs = 500)
         {
-            //for (int i = 0; i < retryCount; i++)
-            //{
             try
             {
                 var fileInfo = new FileInfo(path);
@@ -267,11 +297,13 @@ namespace JobManagementApp.Manager
             {
                 await Task.Delay(delayMs);
             }
-            //}
 
             throw new IOException($"ファイル {path} にアクセスできませんでした。");
         }
 
+        /// <summary>
+        /// 複数ファイル変更検知イベントハンドラー
+        /// </summary>
         private async Task OnMultiFileChanged(LogInfo info)
         {
             if (_isStopped) return;
@@ -279,9 +311,11 @@ namespace JobManagementApp.Manager
             // 最新の5件のファイルを取得して監視対象を更新
             List<FileInfo> latestFiles = GetLatestFiles(info.LogFromPath, info.FileCount);
 
+            // 並列処理用のタスクリスト
+            var addWatcherTasks = new List<Task>();
+
             foreach (FileInfo file in latestFiles)
             {
-                //if (!_multiWatchers.ContainsKey(file.FullName))
                 if (_fw.GetMultiWatcher(file.FullName) is null)
                 {
                     var logInfo = new LogInfo{
@@ -290,15 +324,27 @@ namespace JobManagementApp.Manager
                         FileCount = info.FileCount,
                         IsMultiFile = true
                     };
-                    await AddFileToWatch(logInfo);
+                    
+                    // 並列でFileWatcher追加
+                    addWatcherTasks.Add(AddFileToWatch(logInfo));
                 }
+            }
+
+            // 全てのFileWatcher追加を並列実行
+            if (addWatcherTasks.Count > 0)
+            {
+                await Task.WhenAll(addWatcherTasks);
             }
 
             // 古いファイルの監視を解除
             _fw.RemoveMultiWatcher(latestFiles, info);
         }
 
-        // 指定した件数分、ファイル情報を取得
+        /// <summary>
+        /// 指定した件数分、最新のファイル情報を取得
+        ///  </summary>
+        /// <param name="fullPath">フルパス</param>
+        ///  <param name="fileCount">取得するファイル数</param>
         public List<FileInfo> GetLatestFiles(string fullPath, int fileCount)
         {
             try
@@ -321,6 +367,9 @@ namespace JobManagementApp.Manager
             }
         }
 
+        /// <summary>
+        ///  ファイルコピー処理
+        /// </summary>
         private async Task HandleFileCopy(LogInfo info)
         {
             try
