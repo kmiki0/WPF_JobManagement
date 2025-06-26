@@ -127,6 +127,8 @@ namespace JobManagementApp.Helpers
                         return "取得済";
                     case emObserverStatus.OBSERVER:
                         return "監視中";
+                    case emObserverStatus.ERROR:
+                        return "エラー";
                     case emObserverStatus.STOP:
                         return "停止中";
                 }

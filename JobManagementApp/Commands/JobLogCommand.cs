@@ -1,12 +1,10 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Data;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using JobManagementApp.Views;
 using JobManagementApp.ViewModels;
@@ -14,43 +12,51 @@ using JobManagementApp.Models;
 using JobManagementApp.Manager;
 using JobManagementApp.Helpers;
 using JobManagementApp.BaseClass;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace JobManagementApp.Commands
 {
     public class JobLogCommand : JobCommandArgument
     {
-        public MultiFileWatcher _multiFileWatcher;
-
-        private readonly IFileWatcherManager _fw = App.ServiceProvider.GetRequiredService<IFileWatcherManager>();
+        private FileCopyProgress _fileCopyProgress = new FileCopyProgress();
 
         private readonly JobLogViewModel _vm;
         private readonly IJobLogModel _if;
-        
-        // ファイル監視状態を管理するためのコレクション
-        private readonly ConcurrentDictionary<string, FileWatchingInfo> _watchingFiles;
-        
+        private readonly DateTime _fromDateTime;
+        private readonly DateTime _toDateTime;
+
+        public event Action<string, string, int, int> ProgressChanged;
+
         public JobLogCommand(JobLogViewModel VM, IJobLogModel IF)
         {
             _vm = VM;
             _if = IF;
-            _watchingFiles = new ConcurrentDictionary<string, FileWatchingInfo>();
+
+            // MainWindowから検索範囲を取得
+            try
+            {
+                _fromDateTime = DateTime.Parse(MainViewModel.Instance.SearchFromDate);
+                _toDateTime = DateTime.Parse(MainViewModel.Instance.SearchToDate);
+            }
+            catch (Exception ex)
+            {
+                LogFile.WriteLog($"JobLogCommand: 日付解析エラー - {ex.Message}");
+                _fromDateTime = DateTime.Now.Date;
+                _toDateTime = DateTime.Now.AddHours(1);
+            }
 
             Init();
         }
-
-        private static ConcurrentDictionary<string, SemaphoreSlim> fileSemaphores;
-        private Dictionary<string, FileSystemWatcher> watchers;
 
         /// <summary> 
         /// 初期化
         /// </summary> 
         private void Init()
         {
-            fileSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
-            watchers = new Dictionary<string, FileSystemWatcher>();
+            // イベント設定
+            _fileCopyProgress.ProgressChanged += (fileName, destPath, totalSize, progress) =>
+            {
+                ProgressChanged?.Invoke(fileName, destPath, totalSize, progress);
+            };
 
             // キャッシュ読み込み
             UserFileManager manager = new UserFileManager();
@@ -59,46 +65,11 @@ namespace JobManagementApp.Commands
             // ジョブID 読み込み
             LoadJobId();
 
-           // MainWindowから検索範囲を取得
-           _vm.UpdateSearchDateDisplay();
+            // MainWindowから検索範囲を取得
+            _vm.UpdateSearchDateDisplay();
 
-            // ログ一覧 読み込み
-            LoadLogList();
-        }
-
-        // ログ一覧 読み込み - ToDate対応版
-        public void LoadLogList()
-        {
-            var logList = new List<JobLogItemViewModel>();
-
-            _if.GetJobLinkFile(_vm.Scenario, _vm.Eda).ContinueWith(x =>
-            {
-                // ジョブごとにUIを生成する
-                foreach (JobLinkFile job in x.Result)
-                {
-                    // enum変換
-                    emFileType fileType = Enum.TryParse(job.FILETYPE.ToString(), out fileType) ? fileType : emFileType.LOG;
-
-                    var item = new JobLogItemViewModel {
-                        Scenario = job.SCENARIO,
-                        Eda = job.EDA,
-                        Id = job.JOBID,
-                        FilePath = job.FILEPATH,
-                        FileName = job.FILENAME,
-                        DisplayFileName = job.FILENAME,
-                        FileType = fileType,
-                        FileCount = job.FILECOUNT,
-                        ObserverType = job.OBSERVERTYPE,
-                        ObserverStatus = emObserverStatus.OBSERVER
-                    };
-                    logList.Add(item);
-                }
-                // 画面項目にセット
-                _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
-
-                // 関連ファイルの監視を開始
-                StartMonitoring();
-            });
+            // ログ一覧 読み込み + ダウンロード実行
+            LoadLogListAndDownload();
         }
 
         /// <summary> 
@@ -110,6 +81,345 @@ namespace JobManagementApp.Commands
             _if.GetJobManegment(_vm.Scenario, _vm.Eda).ContinueWith(x =>
             {
                 _vm.Id = x.Result.ID;
+            });
+        }
+
+        /// <summary>
+        /// ログ一覧読み込み + 一回だけのダウンロード実行
+        /// </summary>
+        private void LoadLogListAndDownload()
+        {
+            var logList = new List<JobLogItemViewModel>();
+
+            _if.GetJobLinkFile(_vm.Scenario, _vm.Eda).ContinueWith(async x =>
+            {
+                try
+                {
+                    // ジョブごとにUIを生成する
+                    foreach (JobLinkFile job in x.Result)
+                    {
+                        // enum変換
+                        emFileType fileType = Enum.TryParse(job.FILETYPE.ToString(), out fileType) ? fileType : emFileType.LOG;
+
+                        var item = new JobLogItemViewModel {
+                            Scenario = job.SCENARIO,
+                            Eda = job.EDA,
+                            Id = job.JOBID,
+                            FilePath = job.FILEPATH,
+                            FileName = job.FILENAME,
+                            DisplayFileName = job.FILENAME,
+                            FileType = fileType,
+                            FileCount = job.FILECOUNT,
+                            ObserverType = job.OBSERVERTYPE,
+                            ObserverStatus = emObserverStatus.OBSERVER
+                        };
+                        logList.Add(item);
+                    }
+                    
+                    // 画面項目にセット
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
+                    });
+
+                    // 一回だけダウンロード実行
+                    await StartInitialDownload();
+
+                    // ダウンロード完了後にサマリー更新
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        _vm.UpdateDownloadSummary();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    ErrLogFile.WriteLog($"LoadLogListAndDownload エラー: {ex.Message}");
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        _vm.DownloadSummary = "❌ ログリストの読み込みに失敗しました";
+                    });
+                }
+            });
+        }
+
+        /// <summary>
+        /// 一回だけのダウンロード実行
+        /// </summary>
+        public async Task StartInitialDownload()
+        {
+            try
+            {
+                if (_vm.Logs == null || _vm.Logs.Count == 0)
+                {
+                    LogFile.WriteLog("StartInitialDownload: ダウンロード対象がありません");
+                    return;
+                }
+
+                var downloadTasks = new List<Task>();
+
+                // 非同期処理でファイルダウンロード
+                foreach (JobLogItemViewModel log in _vm.Logs)
+                {
+                    var logInfo = new LogInfo
+                    {
+                        JobId = log.Id,
+                        LogFromPath = Path.Combine(log.FilePath, log.FileName),
+                        FileCount = log.FileCount,
+                        IsMultiFile = log.FileType != emFileType.LOG
+                    };
+
+                    if (log.FileType == emFileType.LOG)
+                    {
+                        // 通常ファイル（単一）
+                        downloadTasks.Add(DownloadSingleFile(logInfo));
+                    }
+                    else
+                    {
+                        // 複数ファイル
+                        downloadTasks.Add(DownloadMultipleFiles(logInfo));
+                    }
+                }
+
+                // 全てのダウンロードタスクを並列実行
+                await Task.WhenAll(downloadTasks);
+                
+                LogFile.WriteLog($"StartInitialDownload: {downloadTasks.Count}個のダウンロードタスクが完了しました");
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"StartInitialDownload エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 単一ファイルのダウンロード
+        /// </summary>
+        private async Task DownloadSingleFile(LogInfo logInfo)
+        {
+            try
+            {
+                // ファイル存在チェック
+                if (!File.Exists(logInfo.LogFromPath))
+                {
+                    await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "ファイルが見つかりません");
+                    return;
+                }
+
+                await HandleFileCopy(logInfo);
+                await UpdateLogItemStatus(logInfo, emObserverStatus.SUCCESS, "ダウンロード完了");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "アクセス権限がありません");
+                ErrLogFile.WriteLog($"DownloadSingleFile アクセス権限エラー: {ex.Message}");
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "フォルダが見つかりません");
+                ErrLogFile.WriteLog($"DownloadSingleFile フォルダエラー: {ex.Message}");
+            }
+            catch (IOException ex)
+            {
+                await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "ファイルアクセスエラー");
+                ErrLogFile.WriteLog($"DownloadSingleFile I/Oエラー: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "予期しないエラー");
+                ErrLogFile.WriteLog($"DownloadSingleFile エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 複数ファイルのダウンロード
+        /// </summary>
+        private async Task DownloadMultipleFiles(LogInfo logInfo)
+        {
+            try
+            {
+                // ディレクトリ存在チェック
+                var directory = Path.GetDirectoryName(logInfo.LogFromPath);
+                if (!Directory.Exists(directory))
+                {
+                    await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "対象フォルダが見つかりません");
+                    return;
+                }
+
+                List<FileInfo> existingFiles = GetLatestFiles(logInfo.LogFromPath, logInfo.FileCount);
+                
+                if (existingFiles.Count == 0)
+                {
+                    await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "対象ファイルが見つかりません");
+                    return;
+                }
+
+                // 並列処理用のタスクリスト
+                var copyTasks = new List<Task>();
+                var successCount = 0;
+                var errorCount = 0;
+                
+                foreach (FileInfo file in existingFiles)
+                {
+                    var fileLogInfo = new LogInfo
+                    {
+                        JobId = logInfo.JobId,
+                        LogFromPath = file.FullName,
+                        FileCount = logInfo.FileCount,
+                        IsMultiFile = true
+                    };
+                    
+                    copyTasks.Add(HandleFileCopyWithResult(fileLogInfo).ContinueWith(task =>
+                    {
+                        if (task.Result)
+                            Interlocked.Increment(ref successCount);
+                        else
+                            Interlocked.Increment(ref errorCount);
+                    }));
+                }
+                
+                await Task.WhenAll(copyTasks);
+                
+                // 結果に応じてステータス更新
+                if (errorCount == 0)
+                {
+                    await UpdateLogItemStatus(logInfo, emObserverStatus.SUCCESS, $"{successCount}ファイル ダウンロード完了");
+                }
+                else if (successCount > 0)
+                {
+                    await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, $"{successCount}成功, {errorCount}エラー");
+                }
+                else
+                {
+                    await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "全ファイルのダウンロードに失敗");
+                }
+            }
+            catch (Exception ex)
+            {
+                await UpdateLogItemStatus(logInfo, emObserverStatus.ERROR, "予期しないエラー");
+                ErrLogFile.WriteLog($"DownloadMultipleFiles エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// ファイルコピーとエラーハンドリング
+        /// </summary>
+        private async Task<bool> HandleFileCopyWithResult(LogInfo info)
+        {
+            try
+            {
+                await HandleFileCopy(info);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"HandleFileCopyWithResult エラー: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 指定した件数分、最新のファイル情報を取得
+        /// </summary>
+        public List<FileInfo> GetLatestFiles(string fullPath, int fileCount)
+        {
+            try
+            {
+                var directory = new DirectoryInfo(Path.GetDirectoryName(fullPath));
+                var files = directory.GetFiles()
+                    .Where(t => t.LastWriteTime >= _fromDateTime && 
+                            t.LastWriteTime <= _toDateTime)
+                    .Where(f => f.Name.Contains(Path.GetFileName(fullPath)))
+                    .OrderByDescending(f => f.LastWriteTime)
+                    .Take(fileCount)
+                    .ToList();
+                
+                return files;
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"GetLatestFiles エラー: {ex.Message}");
+                return new List<FileInfo>();
+            }
+        }
+
+        /// <summary>
+        /// ファイルコピー処理
+        /// </summary>
+        private async Task HandleFileCopy(LogInfo info)
+        {
+            try
+            {
+                // コピー先フォルダパスがセットされていない場合、カレントディレクトリをセット
+                if (string.IsNullOrEmpty(_vm.TempSavePath))
+                {
+                    _vm.TempSavePath = AppDomain.CurrentDomain.BaseDirectory;
+                }
+
+                // 日付のコピーフォルダパス 作成
+                string todayCopyPath = Path.Combine(_vm.TempSavePath, DateTime.Now.ToString("yyyyMMdd"));
+                string copyPath = Path.Combine(todayCopyPath, info.JobId);
+
+                // コピー先フォルダが存在しない場合、フォルダ 作成
+                if (!Directory.Exists(copyPath)) Directory.CreateDirectory(copyPath);
+
+                // コピー元ファイル
+                string fromFilePath = info.LogFromPath;
+                string toFilePath = Path.Combine(copyPath, Path.GetFileName(info.LogFromPath));
+
+                // コピー実施
+                await _fileCopyProgress.CopyFile(fromFilePath, toFilePath);
+
+                // コピー先フォルダパスを設定
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _vm.ToCopyFolderPath = Path.GetDirectoryName(toFilePath);
+                });
+            }
+            catch (Exception ex)
+            {
+                ErrLogFile.WriteLog($"HandleFileCopy エラー: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// ログアイテムのステータス更新
+        /// </summary>
+        private async Task UpdateLogItemStatus(LogInfo logInfo, emObserverStatus status, string message)
+        {
+            await Task.Run(() =>
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var logItem = _vm.Logs.FirstOrDefault(x => 
+                        x.FileName == Path.GetFileName(logInfo.LogFromPath) &&
+                        x.Id == logInfo.JobId);
+                    
+                    if (logItem != null)
+                    {
+                        logItem.ObserverStatus = status;
+                        logItem.ErrorMessage = message;
+                        
+                        // ステータスに応じた表示更新
+                        switch (status)
+                        {
+                            case emObserverStatus.SUCCESS:
+                                logItem.CopyPercent = "100 %";
+                                if (File.Exists(logInfo.LogFromPath))
+                                {
+                                    var fileInfo = new FileInfo(logInfo.LogFromPath);
+                                    logItem.Size = (fileInfo.Length / 1024).ToString("N0") + " KB";
+                                    logItem.UpdateDate = fileInfo.LastWriteTime.ToString("yyyy/MM/dd HH:mm:ss");
+                                }
+                                break;
+                            case emObserverStatus.ERROR:
+                                logItem.CopyPercent = "エラー";
+                                logItem.Size = "-";
+                                logItem.LineCount = message;
+                                break;
+                        }
+                    }
+                });
             });
         }
 
@@ -194,7 +504,7 @@ namespace JobManagementApp.Commands
 
             if (!string.IsNullOrEmpty(path))
             {
-                Process.Start("explorer.exe", path);
+                System.Diagnostics.Process.Start("explorer.exe", path);
             }
             else
             {
@@ -217,656 +527,5 @@ namespace JobManagementApp.Commands
                 }
             }
         }
-
-        // ==================================
-        // 　ログ監視 - ToDate対応版
-        // ==================================
-        public async Task StartMonitoring()
-        {
-            try
-            {
-                // MainWindowのFromDateとToDateを取得
-                DateTime fromDate;
-                DateTime toDate;
-                
-                try
-                {
-                    fromDate = DateTime.Parse(MainViewModel.Instance.SearchFromDate);
-                    toDate = DateTime.Parse(MainViewModel.Instance.SearchToDate);
-                }
-                catch (Exception ex)
-                {
-                    // 日付解析に失敗した場合のフォールバック
-                    LogFile.WriteLog($"StartMonitoring: 日付解析エラー - {ex.Message}");
-                    fromDate = DateTime.Parse(MainViewModel.Instance.SearchFromDate);
-                    toDate = DateTime.Now.AddHours(1); // 1時間後をデフォルト
-                }
-                
-                // MultiFileWatcherにToDateも渡す
-                var _multiFileWatcher = new MultiFileWatcher(
-                    _vm.Logs.ToList(), 
-                    _vm.TempSavePath, 
-                    fromDate,
-                    toDate
-                );
-
-                // イベント ファイルコピー時
-                _multiFileWatcher.ProgressChanged += OnFileProgressChanged;
-                
-                // 監視開始
-                await _multiFileWatcher.StartMonitoring();
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"StartMonitoring エラー: {ex.Message}");
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// ファイル進行状況変更イベント
-        /// </summary>
-        private void OnFileProgressChanged(string filePath, string destPath, int totalSize, int percent)
-        {
-            try
-            {
-                LogInfo logInfo = null;
-                
-                // 1. 完全一致で検索
-                logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => 
-                    string.Equals(Path.GetFullPath(x.LogFromPath), Path.GetFullPath(filePath), StringComparison.OrdinalIgnoreCase));
-                
-                // 2. 完全一致で見つからない場合、ファイル名ベースで検索
-                if (logInfo == null)
-                {
-                    var targetFileName = Path.GetFileName(filePath);
-                    logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => 
-                        string.Equals(Path.GetFileName(x.LogFromPath), targetFileName, StringComparison.OrdinalIgnoreCase));
-                }
-                
-                // 3. マルチファイルの場合、ベースファイル名で検索
-                if (logInfo == null)
-                {
-                    var baseFileName = ExtractBaseFileName(Path.GetFileName(filePath));
-                    logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => 
-                    {
-                        var registeredBaseFileName = ExtractBaseFileName(Path.GetFileName(x.LogFromPath));
-                        return string.Equals(registeredBaseFileName, baseFileName, StringComparison.OrdinalIgnoreCase);
-                    });
-                }
-                
-                // 4. それでも見つからない場合、JobIDベースで検索
-                if (logInfo == null)
-                {
-                    var directory = Path.GetDirectoryName(filePath);
-                    logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => 
-                        string.Equals(Path.GetDirectoryName(x.LogFromPath), directory, StringComparison.OrdinalIgnoreCase));
-                }
-                
-                if (logInfo == null) { return; }
-
-                var watchingKey = GetWatchingKey(logInfo, filePath);
-                var watchingInfo = _watchingFiles.GetOrAdd(watchingKey, _ => new FileWatchingInfo(logInfo, filePath));
-
-                if (logInfo.IsMultiFile)
-                {
-                    // マルチファイル処理
-                    HandleMultiFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
-                }
-                else
-                {
-                    // シングルファイル処理
-                    HandleSingleFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
-                }
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"OnFileProgressChanged エラー: {ex.Message}");
-                ErrLogFile.WriteLog($"対象ファイル: {filePath}");
-            }
-        }
-
-        /// <summary>
-        /// 基本ファイル名を抽出（日付プレフィックスを除去）- 強化版
-        /// </summary>
-        private string ExtractBaseFileName(string fileName)
-        {
-            try
-            {
-                // ファイル名が空の場合
-                if (string.IsNullOrEmpty(fileName))
-                {
-                    return fileName;
-                }
-
-                // パターン1: yyyymmddhhmmss_ファイル名.拡張子
-                var match1 = System.Text.RegularExpressions.Regex.Match(fileName, @"^\d{14}_(.+)$");
-                if (match1.Success)
-                {
-                    var result = match1.Groups[1].Value;
-                    return result;
-                }
-
-                // パターン2: yyyymmddhhmmssファイル名.拡張子（アンダーバーなし）
-                var match2 = System.Text.RegularExpressions.Regex.Match(fileName, @"^\d{14}(.+)$");
-                if (match2.Success)
-                {
-                    var result = match2.Groups[1].Value;
-                    return result;
-                }
-
-                // パターン3: yyyymmdd_ファイル名.拡張子
-                var match3 = System.Text.RegularExpressions.Regex.Match(fileName, @"^\d{8}_(.+)$");
-                if (match3.Success)
-                {
-                    var result = match3.Groups[1].Value;
-                    return result;
-                }
-
-                return fileName;
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"ExtractBaseFileName エラー: {ex.Message}");
-                return fileName; // エラー時は元のファイル名を返す
-            }
-        }
-
-        private void OnFileProgressChanged(string filePath, string destPath, int totalSize, int percent)
-        {
-            try
-            {
-                var logInfo = _fw.GetAllLogInfos().Values.FirstOrDefault(x => x.LogFromPath == filePath);
-                if (logInfo == null) 
-                {
-                    LogFile.WriteLog($"OnFileProgressChanged: LogInfoが見つかりません - {filePath}");
-                    return;
-                }
-
-                var watchingKey = GetWatchingKey(logInfo, filePath);
-                var watchingInfo = _watchingFiles.GetOrAdd(watchingKey, _ => new FileWatchingInfo(logInfo, filePath));
-
-                if (logInfo.IsMultiFile)
-                {
-                    // マルチファイル処理
-                    HandleMultiFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
-                }
-                else
-                {
-                    // シングルファイル処理
-                    HandleSingleFileProgress(watchingInfo, filePath, destPath, totalSize, percent);
-                }
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"OnFileProgressChanged エラー: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// UIスレッドセーフな更新を実行
-        /// </summary>
-        private void InvokeOnUIThread(Action action)
-        {
-            if (Application.Current.Dispatcher.CheckAccess())
-            {
-                // 既にUIスレッドの場合は直接実行
-                action();
-            }
-            else
-            {
-                // UIスレッド以外からの場合はDispatcher経由
-                Application.Current.Dispatcher.Invoke(action);
-            }
-        }
-
-        /// <summary>
-        /// シングルファイルの進行状況処理
-        /// </summary>
-        private void HandleSingleFileProgress(FileWatchingInfo watchingInfo, string filePath, string destPath, int totalSize, int percent)
-        {
-            try
-            {
-                var templateLog = FindTemplateLog(watchingInfo.OriginalLogInfo);
-                if (templateLog != null)
-                {
-                    // UI更新
-                    InvokeOnUIThread(() =>
-                    {
-                        // コピー先フォルダパスを設定
-                        _vm.ToCopyFolderPath = Path.GetDirectoryName(destPath);
-                        
-                        UpdateLogItemUIDirectly(templateLog, filePath, destPath, totalSize, percent);
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"HandleSingleFileProgress エラー: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// マルチファイルの進行状況処理 - UIスレッド修正版
-        /// </summary>
-        private void HandleMultiFileProgress(FileWatchingInfo watchingInfo, string filePath, string destPath, int totalSize, int percent)
-        {
-            try
-            {
-                InvokeOnUIThread(() =>
-                {
-                    // コピー先フォルダパスを設定
-                    _vm.ToCopyFolderPath = Path.GetDirectoryName(destPath);
-                    
-                    var templateLog = FindTemplateLog(watchingInfo.OriginalLogInfo);
-                    if (templateLog == null) 
-                    {
-                        return;
-                    }
-
-                    // 実際のファイル名から基本ファイル名を抽出
-                    var actualFileName = Path.GetFileName(filePath);
-                    var baseFileName = ExtractBaseFileName(actualFileName);
-
-                    // このファイルが元のテンプレートファイル名と一致するかチェック
-                    if (!baseFileName.Equals(templateLog.FileName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return;
-                    }
-
-                    // この実ファイルが既に処理されているかチェック
-                    var existingFileLog = FindExistingFileLog(templateLog, actualFileName);
-
-                    if (existingFileLog != null)
-                    {
-                        // 既存エントリを更新
-                        UpdateLogItemUIDirectly(existingFileLog, filePath, destPath, totalSize, percent);
-                        
-                        if (percent >= 100)
-                        {
-                            existingFileLog.LineCount = GetLineCount(destPath, existingFileLog).ToString() + " 件";
-                        }
-                    }
-                    else
-                    {
-                        // 新しいファイルの場合
-                        if (IsTemplateNotYetOverwritten(templateLog))
-                        {
-                            // 初回検出：テンプレートを実ファイル情報で上書き
-                            OverwriteTemplateWithActualFileDirectly(templateLog, filePath, destPath, totalSize, percent);
-                            
-                            if (percent >= 100)
-                            {
-                                templateLog.LineCount = GetLineCount(destPath, templateLog).ToString() + " 件";
-                            }
-                        }
-                        else
-                        {
-                            // 2回目以降：新しいエントリを追加（昇順で挿入）
-                            var newFileLog = CreateNewFileLogEntry(templateLog, filePath, destPath, totalSize, percent);
-                            
-                            if (newFileLog.ObserverStatus == emObserverStatus.SUCCESS)
-                            {
-                                newFileLog.LineCount = GetLineCount(destPath, newFileLog).ToString() + " 件";
-                            }
-
-                            // 昇順になるよう挿入位置を計算
-                            var insertIndex = FindInsertPositionForAscendingOrder(templateLog, actualFileName);
-                            
-                            // 計算された位置に挿入
-                            if (insertIndex >= 0 && insertIndex <= _vm.Logs.Count)
-                            {
-                                _vm.Logs.Insert(insertIndex, newFileLog);
-                            }
-                            else
-                            {
-                                _vm.Logs.Add(newFileLog);
-                            }
-                        }
-                    }
-
-                    // 不要になったエントリの削除
-                    CleanupObsoleteFileEntries(templateLog);
-                });
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"HandleMultiFileProgress エラー: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// ファイル名昇順になるよう挿入位置を計算
-        /// </summary>
-        private int FindInsertPositionForAscendingOrder(JobLogItemViewModel templateLog, string newFileName)
-        {
-            try
-            {
-                // 同じ基本ファイル名（テンプレート）に関連するエントリをすべて取得
-                var relatedEntries = _vm.Logs
-                    .Select((log, index) => new { Log = log, Index = index })
-                    .Where(x => x.Log.FileName == templateLog.FileName)
-                    .OrderBy(x => x.Index)
-                    .ToList();
-
-                // 関連エントリがない場合
-                if (!relatedEntries.Any())
-                {
-                    return _vm.Logs.Count;
-                }
-
-                // 挿入位置を探す
-                for (int i = 0; i < relatedEntries.Count; i++)
-                {
-                    var currentEntry = relatedEntries[i];
-                    var currentDisplayFileName = currentEntry.Log.DisplayFileName;
-                    
-                    // 文字列比較で新しいファイル名が現在のエントリより小さい場合
-                    if (string.Compare(newFileName, currentDisplayFileName, StringComparison.OrdinalIgnoreCase) < 0)
-                    {
-                        return currentEntry.Index;
-                    }
-                }
-
-                // すべてのエントリより大きい場合は、最後の関連エントリの次に挿入
-                var lastRelatedEntry = relatedEntries.Last();
-                var insertIndex = lastRelatedEntry.Index + 1;
-                
-                return insertIndex;
-            }
-            catch (Exception ex)
-            {
-                // エラー時は安全に最後に追加
-                return _vm.Logs.Count;
-            }
-        }
-
-
-        /// <summary>
-        /// プロパティを直接更新
-        /// </summary>
-        private void UpdateLogItemUIDirectly(JobLogItemViewModel logItem, string filePath, string destPath, int totalSize, int percent)
-        {
-            logItem.Size = totalSize.ToString("N0") + " KB";
-            logItem.CopyPercent = percent.ToString() + " %";
-            logItem.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
-            logItem.ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER;
-        }
-
-        /// <summary>
-        /// テンプレートログを実ファイル情報で直接上書き 
-        /// </summary>
-        private void OverwriteTemplateWithActualFileDirectly(JobLogItemViewModel templateLog, string filePath, string destPath, int totalSize, int percent)
-        {
-            var actualFileName = Path.GetFileName(filePath);
-            
-            // テンプレートの基本情報は保持し、実ファイル固有の情報のみ更新
-            templateLog.DisplayFileName = actualFileName;
-            templateLog.Size = totalSize.ToString("N0") + " KB";
-            templateLog.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
-            templateLog.CopyPercent = percent.ToString() + " %";
-            templateLog.ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER;
-        }
-
-        /// <summary>
-        /// テンプレートログを検索 - 修正版（基本ファイル名で検索）
-        /// </summary>
-        private JobLogItemViewModel FindTemplateLog(LogInfo logInfo)
-        {
-            try
-            {
-                // 実際のファイルパスから基本ファイル名を抽出
-                var actualFileName = Path.GetFileName(logInfo.LogFromPath); // "20250616120000_sample.tsv"
-                var baseFileName = ExtractBaseFileName(actualFileName);     // "sample.tsv"
-                var candidates = _vm.Logs.Where(x => x.FileName == baseFileName).ToList();
-                
-                // FileNameが基本ファイル名と一致するものを「元テンプレート」として扱う
-                var result = _vm.Logs.FirstOrDefault(x => 
-                    x.FileName == baseFileName);       
-                
-                return result;
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"FindTemplateLog エラー: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// 元テンプレートを検索（上書き状態に関係なく）
-        /// </summary>
-        private JobLogItemViewModel FindOriginalTemplate(string baseFileName)
-        {
-            try
-            {
-                // FileNameが基本ファイル名と一致する最初のエントリを「元テンプレート」
-                // 複数ある場合は最初の1件
-                var result = _vm.Logs.FirstOrDefault(x => 
-                    x.FileName == baseFileName &&
-                    x.FileType != emFileType.LOG);
-                
-                return result;
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"FindOriginalTemplate エラー: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// 既存のファイルログエントリを検索（テンプレートが実ファイル化されている場合も含む）- 修正版
-        /// </summary>
-        private JobLogItemViewModel FindExistingFileLog(JobLogItemViewModel templateLog, string actualFileName)
-        {
-            try
-            {
-                // パターン1: テンプレート自体が既にこの実ファイル名になっている場合
-                if (templateLog.DisplayFileName == actualFileName)
-                {
-                    return templateLog;
-                }
-
-                // パターン2: 同じ基本ファイル名で、同じ実ファイル名の別エントリを検索（2回目以降に追加されたエントリ）
-                var result = _vm.Logs.FirstOrDefault(x => 
-                    x.FileName == templateLog.FileName &&
-                    x.DisplayFileName == actualFileName &&
-                    x != templateLog);
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"FindExistingFileLog エラー: {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// テンプレートがまだ実ファイルで上書きされていないかチェック - 詳細ログ版
-        /// </summary>
-        private bool IsTemplateNotYetOverwritten(JobLogItemViewModel templateLog)
-        {
-            try
-            {
-                // DisplayFileNameとFileNameが同じ場合は、まだテンプレート状態
-                bool isTemplate = templateLog.DisplayFileName == templateLog.FileName;
-                
-                return isTemplate;
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"IsTemplateNotYetOverwritten エラー: {ex.Message}");
-                return true; // エラー時は安全側でテンプレート状態とみなす
-            }
-        }
-
-        /// <summary>
-        /// 新しいファイルログエントリを作成
-        /// </summary>
-        private JobLogItemViewModel CreateNewFileLogEntry(JobLogItemViewModel templateLog, string filePath, string destPath, int totalSize, int percent)
-        {
-            var actualFileName = Path.GetFileName(filePath);
-            
-            return new JobLogItemViewModel
-            {
-                Scenario = templateLog.Scenario,
-                Eda = templateLog.Eda,
-                Id = templateLog.Id,
-                FilePath = templateLog.FilePath, // 元のパスを保持
-                FileName = templateLog.FileName, // 元のファイル名を保持
-                DisplayFileName = actualFileName, // 実際のファイル名を表示
-                FileType = templateLog.FileType,
-                FileCount = templateLog.FileCount,
-                ObserverType = templateLog.ObserverType,
-                Size = totalSize.ToString("N0") + " KB",
-                UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss"),
-                CopyPercent = percent.ToString() + " %",
-                ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER,
-            };
-        }
-
-        /// <summary>
-        /// ログアイテムUIを更新（シンプル版）
-        /// </summary>
-        private void UpdateLogItemUI(JobLogItemViewModel logItem, string filePath, string destPath, int totalSize, int percent)
-        {
-            if (logItem == null) return;
-
-            // 基本的な情報を更新（DisplayFileNameは変更しない）
-            logItem.Size = totalSize.ToString("N0") + " KB";
-            logItem.CopyPercent = percent.ToString() + " %";
-            logItem.UpdateDate = File.GetLastWriteTime(filePath).ToString("yyyy/MM/dd HH:mm:ss");
-            logItem.ObserverStatus = percent >= 100 ? emObserverStatus.SUCCESS : emObserverStatus.OBSERVER;
-        }
-
-        /// <summary>
-        /// 基本ファイル名を抽出（日付プレフィックスを除去）- 強化版
-        /// </summary>
-        private string ExtractBaseFileName(string fileName)
-        {
-            try
-            {
-                // ファイル名が空の場合
-                if (string.IsNullOrEmpty(fileName))
-                {
-                    return fileName;
-                }
-
-                // パターン1: yyyymmddhhmmss_ファイル名.拡張子
-                var match1 = Regex.Match(fileName, @"^\d{14}_(.+)$");
-                if (match1.Success)
-                {
-                    var result = match1.Groups[1].Value;
-                    return result;
-                }
-
-                // パターン2: yyyymmddhhmmssファイル名.拡張子（アンダーバーなし）
-                var match2 = Regex.Match(fileName, @"^\d{14}(.+)$");
-                if (match2.Success)
-                {
-                    var result = match2.Groups[1].Value;
-                    return result;
-                }
-
-                // どのパターンにも一致しない場合は元のファイル名をそのまま返す
-                return fileName;
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"ExtractBaseFileName エラー: {ex.Message}");
-                return fileName; // エラー時は元のファイル名を返す
-            }
-        }
-
-        /// <summary>
-        /// 監視キーを生成
-        /// </summary>
-        private string GetWatchingKey(LogInfo logInfo, string filePath)
-        {
-            return $"{logInfo.JobId}_{Path.GetFileName(logInfo.LogFromPath)}_{Path.GetFileName(filePath)}";
-        }
-
-        /// <summary>
-        /// 廃止されたファイルエントリをクリーンアップ
-        /// </summary>
-        private void CleanupObsoleteFileEntries(JobLogItemViewModel templateLog)
-        {
-            try
-            {
-                var currentWatchers = _fw.GetAllMultiWatchers().Keys.ToHashSet();
-                
-                // テンプレートと同じFileNameを持つエントリで、現在監視されていないものを削除
-                var logsToRemove = _vm.Logs
-                    .Where(x => x.FileName == templateLog.FileName && 
-                               x.DisplayFileName != x.FileName && // テンプレート状態ではない
-                               !currentWatchers.Contains(Path.Combine(x.FilePath, x.DisplayFileName)))
-                    .ToList();
-
-                // ファイルエントリ削除
-                if (logsToRemove.Any())
-                {
-                    var logList = _vm.Logs.ToList();
-                    foreach (var logToRemove in logsToRemove)
-                    {
-                        logList.Remove(logToRemove);
-                    }
-                    _vm.Logs = new ObservableCollection<JobLogItemViewModel>(logList);
-                }
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"CleanupObsoleteFileEntries エラー: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// ファイルの行数を取得
-        /// </summary>
-        private int GetLineCount(string filePath, JobLogItemViewModel log)
-        {
-            int lineCount = 0;
-
-            try
-            {
-                // 一時ファイルにコピーして行数をカウント
-                string tempFilePath = Path.GetTempFileName();
-                File.Copy(filePath, tempFilePath, true);
-
-                // 行数をカウント
-                lineCount = File.ReadLines(tempFilePath).Count();
-
-                // 一時ファイルを削除
-                File.Delete(tempFilePath);
-            }
-            catch (Exception ex)
-            {
-                ErrLogFile.WriteLog($"GetLineCount エラー: {ex.Message}");
-            }
-
-            return lineCount;
-        }
-
-        #region 内部クラス
-
-        /// <summary>
-        /// ファイル監視情報を管理するクラス
-        /// </summary>
-        private class FileWatchingInfo
-        {
-            public LogInfo OriginalLogInfo { get; }
-            public string ActualFilePath { get; }
-            public DateTime StartTime { get; }
-
-            public FileWatchingInfo(LogInfo originalLogInfo, string actualFilePath)
-            {
-                OriginalLogInfo = originalLogInfo;
-                ActualFilePath = actualFilePath;
-                StartTime = DateTime.Now;
-            }
-        }
-
-        #endregion
     }
 }

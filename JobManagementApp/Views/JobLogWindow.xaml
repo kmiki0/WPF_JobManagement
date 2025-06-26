@@ -127,22 +127,29 @@
                                 <Setter Property="BorderThickness" Value="2" />
                                 <Setter Property="CornerRadius" Value="5" />
                                 <Setter Property="Width" Value="50" />
-                               <Style.Triggers>
+                                <Style.Triggers>
                                     <!-- 取得済 -->
                                     <DataTrigger Binding="{Binding ObserverStatus}" Value="0">
-                                        <Setter Property="Background" Value="LightSteelBlue"/>
+                                        <Setter Property="Background" Value="LightGreen"/>
                                     </DataTrigger>
                                     <!-- 監視中 -->
                                     <DataTrigger Binding="{Binding ObserverStatus}" Value="1">
                                         <Setter Property="Background" Value="Khaki"/>
                                     </DataTrigger>
-                                    <!-- 停止中 -->
+                                    <!-- エラー -->
                                     <DataTrigger Binding="{Binding ObserverStatus}" Value="2">
+                                        <Setter Property="Background" Value="LightCoral"/>
+                                    </DataTrigger>
+                                    <!-- 停止中 -->
+                                    <DataTrigger Binding="{Binding ObserverStatus}" Value="9">
                                         <Setter Property="Background" Value="Gainsboro"/>
                                     </DataTrigger>
                                 </Style.Triggers> 
                             </Style>
                         </Border.Style>
+                        <TextBlock Text="{Binding Path=ObserverStatus, Converter={StaticResource observerStatusToJapaneseConverter}}" 
+                                HorizontalAlignment="Center" Margin="5"
+                                ToolTip="{Binding ErrorMessage}"/>
                         <ContentControl Content="{Binding}">
                             <ContentControl.Style>
                                 <Style TargetType="ContentControl">

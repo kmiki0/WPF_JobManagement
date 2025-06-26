@@ -37,9 +37,10 @@ namespace JobManagementApp.Models
 
     public enum emObserverStatus
     {
-        //0 :取得済, 1 : 監視中, 9 : 停止中
+        //0 :取得済, 1 : 監視中, 2 : エラー, 9 : 停止中
         SUCCESS = 0,
         OBSERVER = 1,
+        ERROR = 2,
         STOP = 9,
     }
 
