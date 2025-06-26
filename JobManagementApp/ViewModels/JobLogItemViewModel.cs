@@ -104,6 +104,17 @@ namespace JobManagementApp.ViewModels
             }
         }
 
+        // ファイルコピーパーセント
+        private string _errormessage { get; set; }
+        public string ErrorMessage {
+            get => _errormessage;
+            set
+            {
+                _copyPercent = value;
+                OnPropertyChanged(nameof(ErrorMessage));
+            }
+        }
+
         // 編集ボタン
         public ICommand EditCommand { get; set; }
 

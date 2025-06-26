@@ -147,9 +147,6 @@
                                 </Style.Triggers> 
                             </Style>
                         </Border.Style>
-                        <TextBlock Text="{Binding Path=ObserverStatus, Converter={StaticResource observerStatusToJapaneseConverter}}" 
-                                HorizontalAlignment="Center" Margin="5"
-                                ToolTip="{Binding ErrorMessage}"/>
                         <ContentControl Content="{Binding}">
                             <ContentControl.Style>
                                 <Style TargetType="ContentControl">
